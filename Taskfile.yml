@@ -26,9 +26,10 @@ tasks:
       - pnpm typecheck
 
   test:
-    desc: The unit tests (Vitest), against the fake spin in test/fake-spin/.
+    desc: The unit tests - Vitest, against the fake spin in test/fake-spin/, and hack/'s Go.
     cmds:
       - pnpm test
+      - go test ./hack/...
 
   test:integration:
     desc: Activate the extension in a real VS Code, downloaded into .vscode-test/. Under xvfb-run when it is installed, which CI's runner has; otherwise on the display there is.
@@ -40,10 +41,36 @@ tasks:
       - '{{if .XVFB}}xvfb-run -a {{end}}pnpm test:integration'
 
   package:
-    desc: Package the extension into spinbox.vsix with vsce. One package for every platform until the CLI is carried in it.
+    desc: Package the extension into spinbox.vsix with vsce, without the CLI - what CI's gate checks packages. package:all makes the ones that are published.
     cmds:
       - task: build
       - pnpm package
+
+  package:spin:
+    desc: Pull the spin CLI versions.yaml pins for every platform its release has, into build/spin/<target>/spin, each checked with cosign against what spin's release workflow signed and attested of that release (hack/spinbin). A platform the release lacks is skipped, and said.
+    vars:
+      SPIN:
+        sh: go tool versions version spin
+      COSIGN:
+        sh: echo "go run github.com/sigstore/cosign/v3/cmd/cosign@$(go tool versions version cosign)"
+    cmds:
+      - rm -rf build/spin
+      - go run ./hack/spinbin -version {{.SPIN}} -out build/spin -cosign '{{.COSIGN}}'
+
+  package:all:
+    desc: One VSIX per platform the pinned spin release has a CLI for, spinbox-<target>.vsix, each carrying only its own checked CLI at bin/<target>/spin. A CLI cosign refuses fails the task before any VSIX is made.
+    cmds:
+      - rm -f spinbox-*.vsix
+      - task: package:spin
+      - task: build
+      - |
+        set -eu
+        for dir in build/spin/*/; do
+          target=$(basename "$dir")
+          rm -rf bin && mkdir -p "bin/$target" && cp "$dir/spin" "bin/$target/spin"
+          pnpm exec vsce package --no-dependencies --skip-license --target "$target" --out "spinbox-$target.vsix"
+        done
+        rm -rf bin
 
   gate:
     desc: What holds the repository's shape - every install through the firewall, and every workflow step a task.

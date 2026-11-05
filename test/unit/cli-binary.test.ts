@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "n
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
-import { SpinBinary, SpinNotFoundError } from "../../src/cli/binary"
+import { SpinBinary, SpinNotFoundError, targetDir } from "../../src/cli/binary"
 import { ProcessSpinCli } from "../../src/cli/client"
 import { FAKE_SPIN } from "./fake-spin"
 
@@ -10,13 +10,13 @@ function dirs() {
   const root = mkdtempSync(join(tmpdir(), "spin-binary-"))
   const extensionPath = join(root, "ext")
   const storagePath = join(root, "storage")
-  mkdirSync(join(extensionPath, "bin", "linux-amd64"), { recursive: true })
+  mkdirSync(join(extensionPath, "bin", "linux-x64"), { recursive: true })
   return { extensionPath, storagePath }
 }
 
-// Puts a CLI in the VSIX's bin/linux-amd64, as the given release.
+// Puts a CLI in the VSIX's bin/linux-x64, as the given release.
 function carry(extensionPath: string, release: string, content: string) {
-  const dir = join(extensionPath, "bin", "linux-amd64")
+  const dir = join(extensionPath, "bin", "linux-x64")
   writeFileSync(join(dir, "spin"), content)
   writeFileSync(join(dir, "VERSION"), `${release}\n`)
 }
@@ -92,5 +92,19 @@ describe("SpinBinary", () => {
     const b = binary(extensionPath, storagePath)
     const cli = new ProcessSpinCli({ binary: () => b.path(), log: () => {} })
     await expect(cli.version()).resolves.toMatchObject({ cli: "v20261105.01" })
+  })
+
+  // What package:all builds: hack/spinbin names each target's directory, and .vscodeignore lets
+  // the two files the install reads into the VSIX.
+  it("looks where package:all puts the CLI", () => {
+    const spinbin = readFileSync(new URL("../../hack/spinbin/main.go", import.meta.url), "utf8")
+    const targets = [...spinbin.matchAll(/\{"[a-z0-9-]+", "([a-z0-9-]+)"\}/g)].map((m) => m[1])
+    expect(targets.length).toBeGreaterThan(0)
+    for (const target of targets) {
+      const [platform, arch] = (target ?? "").split("-") as [NodeJS.Platform, NodeJS.Architecture]
+      expect(targetDir(platform, arch)).toBe(target)
+    }
+    const ignore = readFileSync(new URL("../../.vscodeignore", import.meta.url), "utf8").split("\n")
+    expect(ignore).toEqual(expect.arrayContaining(["!bin/*/spin", "!bin/*/VERSION"]))
   })
 })

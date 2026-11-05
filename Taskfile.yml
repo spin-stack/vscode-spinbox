@@ -54,7 +54,7 @@ tasks:
       - pnpm package
 
   package:spin:
-    desc: Pull the spin CLI versions.yaml pins for every platform its release has, into build/spin/<target>/spin, each checked with cosign against what spin's release workflow signed and attested of that release (hack/spinbin). A platform the release lacks is skipped, and said.
+    desc: Pull the spin CLI versions.yaml pins for every platform its release has, into build/spin/<target>/spin with its VERSION, each checked with cosign against what spin's release workflow signed and attested of that release (hack/spinbin). A platform the release lacks is skipped, and said.
     vars:
       SPIN:
         sh: go tool versions version spin
@@ -65,7 +65,7 @@ tasks:
       - go run ./hack/spinbin -version {{.SPIN}} -out build/spin -cosign '{{.COSIGN}}'
 
   package:all:
-    desc: One VSIX per platform the pinned spin release has a CLI for, spinbox-<target>.vsix, each carrying only its own checked CLI at bin/<target>/spin. A CLI cosign refuses fails the task before any VSIX is made.
+    desc: One VSIX per platform the pinned spin release has a CLI for, spinbox-<target>.vsix, each carrying only its own checked CLI at bin/<target>/spin and the release it is in bin/<target>/VERSION, where the extension looks for them (src/cli/binary.ts). A CLI cosign refuses fails the task before any VSIX is made.
     cmds:
       - rm -f spinbox-*.vsix
       - task: package:spin
@@ -74,7 +74,7 @@ tasks:
         set -eu
         for dir in build/spin/*/; do
           target=$(basename "$dir")
-          rm -rf bin && mkdir -p "bin/$target" && cp "$dir/spin" "bin/$target/spin"
+          rm -rf bin && mkdir -p "bin/$target" && cp "$dir/spin" "$dir/VERSION" "bin/$target/"
           pnpm exec vsce package --no-dependencies --skip-license {{.PRE_RELEASE}} --target "$target" --out "spinbox-$target.vsix"
         done
         rm -rf bin

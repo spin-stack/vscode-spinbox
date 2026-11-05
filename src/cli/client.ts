@@ -98,6 +98,10 @@ export const DEFAULT_TIMEOUTS: Timeouts = {
 const LOGIN_GRACE_MS = 30_000
 // Between SIGTERM and SIGKILL, for a CLI that does not stop when asked.
 const KILL_GRACE_MS = 3_000
+// After spin exits, how long its stdout and stderr may stay open: a child it left running that
+// inherited them (ssh, a helper in the background) keeps them open, and a command ends only once
+// they close.
+const PIPE_GRACE_MS = 1_000
 
 export interface ProcessSpinCliOptions {
   // The spin to run, resolved for each command (SpinBinary.path).
@@ -222,15 +226,25 @@ export class ProcessSpinCli implements SpinCli {
       const stderr: Buffer[] = []
       let killedFor: unknown
       let settled = false
+      let pipes: NodeJS.Timeout | undefined
 
+      const exited = () => child.exitCode !== null || child.signalCode !== null
+      const closePipes = () => {
+        child.stdout.destroy()
+        child.stderr.destroy()
+      }
       const kill = (reason: unknown) => {
         if (killedFor !== undefined || settled) {
           return
         }
         killedFor = reason
+        if (exited()) {
+          closePipes()
+          return
+        }
         child.kill("SIGTERM")
         setTimeout(() => {
-          if (child.exitCode === null && child.signalCode === null) {
+          if (!exited()) {
             child.kill("SIGKILL")
           }
         }, KILL_GRACE_MS).unref()
@@ -250,6 +264,7 @@ export class ProcessSpinCli implements SpinCli {
       const done = () => {
         settled = true
         clearTimeout(timer)
+        clearTimeout(pipes)
         signal?.removeEventListener("abort", onAbort)
       }
 
@@ -279,6 +294,15 @@ export class ProcessSpinCli implements SpinCli {
             ? new SpinNotFoundError(`Cannot run spin at ${binary}: ${err.message}`, binary)
             : err,
         )
+      })
+      // 'close' waits for stdout and stderr as well as the exit: they are closed here once spin
+      // is gone, at once when it was killed and PIPE_GRACE_MS after it exited on its own.
+      child.on("exit", () => {
+        if (killedFor !== undefined) {
+          closePipes()
+        } else {
+          pipes = setTimeout(closePipes, PIPE_GRACE_MS)
+        }
       })
       child.on("close", (exit, sig) => {
         if (settled) {

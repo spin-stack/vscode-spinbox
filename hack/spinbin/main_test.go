@@ -193,6 +193,14 @@ func TestOnlyACheckedCLIOfTheReleaseIsPutUnderItsTarget(t *testing.T) {
 				if fi, err := os.Stat(path); ok && err == nil && fi.Mode().Perm()&0o111 == 0 {
 					t.Errorf("%s is %v, want it executable", path, fi.Mode())
 				}
+				versionFile := filepath.Join(out, p.target, "VERSION")
+				v, err := os.ReadFile(versionFile)
+				switch {
+				case !ok && err == nil:
+					t.Errorf("%s holds %q, want nothing", versionFile, v)
+				case ok && string(v) != version+"\n":
+					t.Errorf("%s holds %q (%v), want %q", versionFile, v, err, version+"\n")
+				}
 			}
 			if left, _ := filepath.Glob(filepath.Join(out, ".pull-*")); len(left) != 0 {
 				t.Errorf("left %v behind", left)

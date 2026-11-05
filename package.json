@@ -17,8 +17,12 @@
   "categories": [
     "Other"
   ],
+  "extensionKind": [
+    "ui"
+  ],
   "main": "./dist/extension.js",
   "activationEvents": [
+    "onStartupFinished",
     "onUri",
     "onCommand:spinbox.openWorkspace",
     "onCommand:spinbox.signIn",
@@ -26,7 +30,8 @@
     "onAuthenticationRequest:spinbox",
     "onCommand:spinbox.refresh",
     "onCommand:spinbox.startWorkspace",
-    "onCommand:spinbox.stopWorkspace"
+    "onCommand:spinbox.stopWorkspace",
+    "onCommand:spinbox.workspaceMenu"
   ],
   "contributes": {
     "commands": [
@@ -63,6 +68,11 @@
         "title": "Stop Workspace",
         "category": "Spinbox",
         "icon": "$(debug-stop)"
+      },
+      {
+        "command": "spinbox.workspaceMenu",
+        "title": "Workspace Actions",
+        "category": "Spinbox"
       }
     ],
     "authentication": [
@@ -100,6 +110,10 @@
         {
           "command": "spinbox.stopWorkspace",
           "when": "false"
+        },
+        {
+          "command": "spinbox.workspaceMenu",
+          "when": "spinbox.inWorkspace"
         }
       ],
       "view/title": [

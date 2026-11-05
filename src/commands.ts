@@ -6,4 +6,5 @@ export const COMMANDS = [
   "spinbox.refresh",
   "spinbox.startWorkspace",
   "spinbox.stopWorkspace",
+  "spinbox.workspaceMenu",
 ] as const

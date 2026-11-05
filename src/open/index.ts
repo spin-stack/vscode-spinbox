@@ -1,6 +1,7 @@
 import * as vscode from "vscode"
 import { showCliError } from "../errors"
 import { ensureRemoteExtension } from "../remote/extension"
+import { trace } from "../telemetry/vscode"
 import { readCommit } from "./editor"
 import { type OpenCli, type OpenDeps, type OpenUi, openWorkspace, pickAndOpen } from "./open"
 import { parseOpenUri } from "./target"
@@ -47,6 +48,7 @@ function deps(cli: OpenCli): OpenDeps {
     ui,
     commit: () => readCommit(vscode.env.appRoot),
     vscodeVersion: vscode.version,
+    trace,
   }
 }
 

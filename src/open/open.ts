@@ -1,5 +1,6 @@
 import type { SpinCli } from "../cli/client"
 import type { Workspace } from "../cli/contract"
+import type { Trace } from "../telemetry"
 import { checkTarget, type OpenTarget } from "./target"
 
 // What opening asks of the CLI.
@@ -25,12 +26,24 @@ export interface OpenDeps {
   // The commit of this VS Code; rejects when it names none.
   commit(): Promise<string>
   vscodeVersion: string
+  // The traceparent of a new trace for one operation, which every spin command it runs joins;
+  // undefined with telemetry off (src/telemetry).
+  trace: Trace
 }
 
 // openWorkspace runs `spin code <workspace> [path] --no-open --start --vscode-commit ...` and
 // opens the folder it answers in a new window. Every failure is shown, the CLI's with its action
-// and a retry that runs it again; cancelling shows nothing.
+// and a retry that runs it again; cancelling shows nothing. Each attempt is a trace of its own.
 export async function openWorkspace(deps: OpenDeps, target: OpenTarget): Promise<void> {
+  await open(deps, target, deps.trace())
+}
+
+// open is openWorkspace whose first attempt runs in the trace traceparent names.
+async function open(
+  deps: OpenDeps,
+  target: OpenTarget,
+  traceparent: string | undefined,
+): Promise<void> {
   const reason = checkTarget(target.workspace, target.path)
   if (reason !== undefined) {
     deps.ui.showError(`Spinbox cannot open it: ${reason}.`)
@@ -43,7 +56,7 @@ export async function openWorkspace(deps: OpenDeps, target: OpenTarget): Promise
     deps.ui.showError(`Spinbox cannot open ${target.workspace}: ${(err as Error).message}.`)
     return
   }
-  const run = async (): Promise<void> => {
+  const run = async (traceparent: string | undefined): Promise<void> => {
     let folderUri: string | undefined
     try {
       folderUri = await deps.ui.progress(`Opening ${target.workspace}`, async (signal) => {
@@ -52,6 +65,7 @@ export async function openWorkspace(deps: OpenDeps, target: OpenTarget): Promise
             start: true,
             vscodeVersion: deps.vscodeVersion,
             signal,
+            traceparent,
           })
           return r.folder_uri
         } catch (err) {
@@ -62,27 +76,29 @@ export async function openWorkspace(deps: OpenDeps, target: OpenTarget): Promise
         }
       })
     } catch (err) {
-      deps.ui.showCliError(err, run)
+      deps.ui.showCliError(err, () => run(deps.trace()))
       return
     }
     if (folderUri !== undefined) {
       await deps.ui.openFolder(folderUri)
     }
   }
-  await run()
+  await run(traceparent)
 }
 
-// pickAndOpen opens the workspace the command names, or the one the person picks from the list.
+// pickAndOpen opens the workspace the command names, or the one the person picks from the list;
+// the listing and the open it leads to are one trace.
 export async function pickAndOpen(deps: OpenDeps, workspace?: string): Promise<void> {
   if (workspace !== undefined) {
     await openWorkspace(deps, { workspace })
     return
   }
   const run = async (): Promise<void> => {
+    const traceparent = deps.trace()
     let picked: Workspace | undefined
     try {
       const items = await deps.ui.progress("Listing workspaces", (signal) =>
-        deps.cli.listWorkspaces({ signal }).catch((err: unknown) => {
+        deps.cli.listWorkspaces({ signal, traceparent }).catch((err: unknown) => {
           if (signal.aborted) {
             return undefined
           }
@@ -95,7 +111,7 @@ export async function pickAndOpen(deps: OpenDeps, workspace?: string): Promise<v
       return
     }
     if (picked !== undefined) {
-      await openWorkspace(deps, { workspace: picked.id })
+      await open(deps, { workspace: picked.id }, traceparent)
     }
   }
   await run()

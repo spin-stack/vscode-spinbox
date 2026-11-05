@@ -167,7 +167,7 @@
         "spinbox.telemetry": {
           "type": "boolean",
           "default": true,
-          "description": "Send traces of what the extension and the spin CLI do to the installation, which keeps them with its own."
+          "description": "Run each Spinbox operation in a trace the spin CLI joins, so the installation keeps it with its own. Off, the CLI is handed no trace; it still traces its own commands unless its profile sets telemetry: false."
         },
         "spinbox.cliPath": {
           "type": "string",

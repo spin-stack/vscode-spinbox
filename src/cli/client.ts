@@ -42,8 +42,9 @@ export interface SpinCli {
 
 export interface RunOptions {
   signal?: AbortSignal
-  // W3C traceparent the CLI joins (--traceparent).
-  traceparent?: string
+  // W3C traceparent the CLI joins (--traceparent). Without one, the command runs in a trace of
+  // its own when the ProcessSpinCli has a trace.
+  traceparent?: string | undefined
 }
 
 export interface LoginOptions extends RunOptions {
@@ -62,12 +63,15 @@ export class CliError extends Error {
   // The process's exit status: 1 for an envelope the CLI wrote, otherwise what it exited with, and
   // -1 when it was killed for taking too long.
   readonly exitCode: number
+  // The traceparent the command ran with, which names the trace its failure is found by.
+  readonly traceparent: string | undefined
 
-  constructor(envelope: ErrorEnvelope, exitCode = 1) {
+  constructor(envelope: ErrorEnvelope, exitCode = 1, traceparent?: string) {
     super(envelope.error.message)
     this.name = "CliError"
     this.envelope = envelope
     this.exitCode = exitCode
+    this.traceparent = traceparent
   }
 
   get code(): ErrorCode {
@@ -110,10 +114,14 @@ export interface ProcessSpinCliOptions {
   // Show details opens.
   log: (text: string) => void
   timeouts?: Partial<Timeouts>
+  // The traceparent of a command run without one (src/telemetry): a new trace per command, or
+  // undefined to run it without --traceparent.
+  trace?: () => string | undefined
 }
 
 interface Exited {
   args: readonly string[]
+  traceparent: string | undefined
   lines: string[]
   exit: number | null
   stderr: string
@@ -124,11 +132,13 @@ export class ProcessSpinCli implements SpinCli {
   private readonly binary: () => Promise<string>
   private readonly log: (text: string) => void
   private readonly timeouts: Timeouts
+  private readonly trace: () => string | undefined
 
   constructor(opts: ProcessSpinCliOptions) {
     this.binary = opts.binary
     this.log = opts.log
     this.timeouts = { ...DEFAULT_TIMEOUTS, ...opts.timeouts }
+    this.trace = opts.trace ?? (() => undefined)
   }
 
   version(opts: RunOptions = {}): Promise<VersionResult> {
@@ -155,13 +165,14 @@ export class ProcessSpinCli implements SpinCli {
   }
 
   async listWorkspaces(opts: RunOptions = {}): Promise<Workspace[]> {
+    const traced = this.traced(opts)
     const list = await this.one<WorkspaceList>(
       ["workspace", "list"],
-      opts,
+      traced,
       this.timeouts.listWorkspaces,
     )
     if (!Array.isArray(list.items)) {
-      throw internal(`spin workspace list answered no items`, 0)
+      throw internal(`spin workspace list answered no items`, 0, traced.traceparent)
     }
     return list.items
   }
@@ -210,7 +221,7 @@ export class ProcessSpinCli implements SpinCli {
     timeoutMs: number,
     onLine?: (line: string, extend: (ms: number) => void) => void,
   ): Promise<Exited> {
-    const { signal, traceparent } = opts
+    const { signal, traceparent } = this.traced(opts)
     signal?.throwIfAborted()
     const binary = await this.binary()
     signal?.throwIfAborted()
@@ -251,7 +262,14 @@ export class ProcessSpinCli implements SpinCli {
       }
       const deadline = (ms: number) =>
         setTimeout(
-          () => kill(internal(`${shown} did not answer within ${Math.round(ms / 1000)} s`, -1)),
+          () =>
+            kill(
+              internal(
+                `${shown} did not answer within ${Math.round(ms / 1000)} s`,
+                -1,
+                traceparent,
+              ),
+            ),
           ms,
         )
       let timer = deadline(timeoutMs)
@@ -315,9 +333,14 @@ export class ProcessSpinCli implements SpinCli {
           reject(killedFor)
           return
         }
-        resolve({ args, lines, exit, stderr: text })
+        resolve({ args, traceparent, lines, exit, stderr: text })
       })
     })
+  }
+
+  // opts with the traceparent its command runs with: its own, or a new trace's.
+  private traced<T extends RunOptions>(opts: T): T {
+    return opts.traceparent === undefined ? { ...opts, traceparent: this.trace() } : opts
   }
 }
 
@@ -327,7 +350,7 @@ function failure(r: Exited): CliError {
   const parsed = r.lines.map(parse)
   const env = parsed.find(isErrorEnvelope)
   if (env) {
-    return new CliError(env, r.exit ?? -1)
+    return new CliError(env, r.exit ?? -1, r.traceparent)
   }
   const shown = `spin ${r.args.join(" ")}`
   // An envelope whose code this extension does not know keeps its message, never its action.
@@ -335,15 +358,23 @@ function failure(r: Exited): CliError {
     .map((v) => (isObject(v) && isObject(v.error) ? v.error.message : undefined))
     .find((m): m is string => typeof m === "string")
   if (message !== undefined) {
-    return internal(message, r.exit ?? -1)
+    return internal(message, r.exit ?? -1, r.traceparent)
   }
   const last = r.stderr.trim().split("\n").at(-1)?.trim()
   const why = r.exit === 0 ? "answered what the contract does not allow" : `exited ${r.exit}`
-  return internal(last ? `${shown} ${why}: ${last}` : `${shown} ${why}`, r.exit ?? -1)
+  return internal(
+    last ? `${shown} ${why}: ${last}` : `${shown} ${why}`,
+    r.exit ?? -1,
+    r.traceparent,
+  )
 }
 
-function internal(message: string, exitCode: number): CliError {
-  return new CliError({ error: { code: "internal", action: "details", message } }, exitCode)
+function internal(message: string, exitCode: number, traceparent: string | undefined): CliError {
+  return new CliError(
+    { error: { code: "internal", action: "details", message } },
+    exitCode,
+    traceparent,
+  )
 }
 
 function parse(line: string): unknown {

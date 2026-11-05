@@ -72,6 +72,7 @@ function setup(
     },
     commit: async () => COMMIT,
     vscodeVersion: "1.120.0",
+    trace: () => undefined,
   }
   return { deps, seen }
 }

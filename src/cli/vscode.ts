@@ -1,4 +1,5 @@
 import * as vscode from "vscode"
+import { trace } from "../telemetry/vscode"
 import { SpinBinary } from "./binary"
 import { ProcessSpinCli } from "./client"
 
@@ -22,6 +23,7 @@ export function createSpin(context: vscode.ExtensionContext): Spin {
   const cli = new ProcessSpinCli({
     binary: () => binary.path(),
     log: (text) => output.append(text),
+    trace,
   })
   return { cli, output }
 }

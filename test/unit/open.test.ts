@@ -114,8 +114,22 @@ describe("openWorkspace", () => {
     const [{ error, retry }] = seen.cliErrors as [Seen["cliErrors"][number]]
     expect(error).toBeInstanceOf(CliError)
     expect((error as CliError).code).toBe("access_needs_signature")
-    await retry()
+    await expect(retry()).rejects.toMatchObject({ code: "access_needs_signature" })
     expect(seen.invocations()).toHaveLength(2)
+    expect(seen.cliErrors).toHaveLength(1)
+  })
+
+  it("runs each attempt in a trace of its own", async () => {
+    const { deps, seen } = setup({ FAKE_SPIN_ERROR: "unreachable" })
+    let n = 0
+    deps.trace = () => `00-${String(++n).padStart(32, "0")}-${"1".repeat(16)}-01`
+    await openWorkspace(deps, { workspace: "ws-1" })
+    await expect(seen.cliErrors[0]?.retry()).rejects.toBeInstanceOf(CliError)
+    const traceparents = seen.invocations().map((a) => a[a.indexOf("--traceparent") + 1])
+    expect(traceparents).toEqual([
+      `00-${"0".repeat(31)}1-${"1".repeat(16)}-01`,
+      `00-${"0".repeat(31)}2-${"1".repeat(16)}-01`,
+    ])
   })
 
   it("reads a failure without an envelope as internal, with what spin wrote on stderr", async () => {

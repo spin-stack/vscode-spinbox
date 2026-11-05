@@ -19,7 +19,9 @@ export function configureErrors(d: ErrorDeps | undefined): void {
 }
 
 // A retry is the command that failed, run again. workspace_stopped's runs it with start set, which
-// a `spin code` retry passes on as --start.
+// a `spin code` retry passes on as --start. It rejects with the failure of that run, which is shown
+// in its place: a retry that showed its failure itself would show a cli_outdated surviving the
+// update as a new one, and update again without end.
 export interface RetryOptions {
   start?: boolean
 }

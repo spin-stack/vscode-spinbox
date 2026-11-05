@@ -23,6 +23,10 @@ export class WorkspacesTree implements vscode.TreeDataProvider<string> {
   // The code of the listing failure last shown, so a poll that fails the same way does not show it
   // again every 30 s. A success clears it.
   private shownFailure: ErrorCode | undefined
+  // What the last listing failed with; undefined once one succeeded or answered not_signed_in.
+  private failure: unknown
+  // Set while a retry lists: the errors module shows what that listing fails with.
+  private retrying = false
 
   constructor(
     private readonly cli: WorkspacesCli,
@@ -72,6 +76,7 @@ export class WorkspacesTree implements vscode.TreeDataProvider<string> {
   private async load(): Promise<void> {
     try {
       this.items = await this.cli.listWorkspaces()
+      this.failure = undefined
       this.shownFailure = undefined
       this.setMessage(undefined)
       await setContext("listed")
@@ -79,23 +84,41 @@ export class WorkspacesTree implements vscode.TreeDataProvider<string> {
       if (err instanceof CliError && err.code === "not_signed_in") {
         // The welcome's Sign In is the action: no notification on top of it.
         this.items = []
+        this.failure = undefined
         this.shownFailure = undefined
         this.setMessage(undefined)
         await setContext("signedOut")
       } else {
-        const code = err instanceof CliError ? err.code : "internal"
+        const code = codeOf(err)
+        this.failure = err
         this.setMessage(TEXT[code])
-        if (this.shownFailure !== code) {
+        if (!this.retrying && this.shownFailure !== code) {
           this.shownFailure = code
-          void showCliError(err, () => {
-            this.shownFailure = undefined
-            return this.refresh()
-          })
+          void showCliError(err, () => this.retry())
         }
       }
     }
     this.changed.fire(undefined)
   }
+
+  // The retry of a failed listing: lists again, and rejects with what that listing failed with,
+  // which the errors module shows in its place.
+  private async retry(): Promise<void> {
+    this.retrying = true
+    try {
+      await this.refresh()
+    } finally {
+      this.retrying = false
+    }
+    if (this.failure !== undefined) {
+      this.shownFailure = codeOf(this.failure)
+      throw this.failure
+    }
+  }
+}
+
+function codeOf(err: unknown): ErrorCode {
+  return err instanceof CliError ? err.code : "internal"
 }
 
 function setContext(value: "listed" | "signedOut"): Thenable<unknown> {

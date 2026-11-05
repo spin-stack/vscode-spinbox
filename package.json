@@ -21,7 +21,9 @@
   "activationEvents": [
     "onUri",
     "onCommand:spinbox.openWorkspace",
-    "onCommand:spinbox.signIn"
+    "onCommand:spinbox.signIn",
+    "onCommand:spinbox.signOut",
+    "onAuthenticationRequest:spinbox"
   ],
   "contributes": {
     "commands": [
@@ -34,6 +36,17 @@
         "command": "spinbox.signIn",
         "title": "Sign In",
         "category": "Spinbox"
+      },
+      {
+        "command": "spinbox.signOut",
+        "title": "Sign Out",
+        "category": "Spinbox"
+      }
+    ],
+    "authentication": [
+      {
+        "id": "spinbox",
+        "label": "Spinbox"
       }
     ],
     "configuration": {

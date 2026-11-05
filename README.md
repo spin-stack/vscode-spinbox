@@ -23,30 +23,19 @@ environment variables or a scenario file: its header says how.
 
 ## Publishing
 
-A tag `v*` pushed to this repository runs `.github/workflows/publish.yml`: it packages every
+A tag `v*` pushed to this repository runs `.github/workflows/publish.yml`. It packages every
 platform (`task package:all`) and publishes each VSIX to the Visual Studio Marketplace (`vsce`)
-and to Open VSX (`ovsx`). The tag is `v` and `package.json`'s `version`; a tag with `-pre` after
-it (`v0.2.0-pre`) publishes the same version as a pre-release, because the Marketplace takes no
-semver pre-release versions.
+and to Open VSX (`ovsx`). The tag is `v` followed by `package.json`'s `version`. A tag with `-pre`
+after it (`v0.3.0-pre`) publishes that version as a pre-release: the Marketplace takes no semver
+pre-release versions, and its convention is an odd minor for pre-releases.
 
 ```sh
-git tag v0.2.0 && git push origin v0.2.0   # package.json says "version": "0.2.0"
+git tag v0.3.0-pre && git push origin v0.3.0-pre   # package.json says "version": "0.3.0"
 ```
 
-The job runs in the GitHub environment `publish`, and its first step fails, naming each one
-missing, until a person has created that environment's two secrets:
+Both registries trust the workflow by OIDC in the GitHub environment `publish`, so it keeps no
+token. A run that failed halfway is run again whole: both registries skip a version they already
+have.
 
-| Secret     | What it is                                                                                                                                                                       |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `VSCE_PAT` | An Azure DevOps personal access token of a member of the Marketplace publisher `spin-stack`, organization *All accessible organizations*, scope *Marketplace: Manage*.             |
-| `OVSX_PAT` | An access token from open-vsx.org (Settings, Access Tokens) of a member of the Open VSX namespace `spin-stack`; `pnpm exec ovsx create-namespace spin-stack` makes it the first time. |
-
-Settings, Environments, New environment `publish` in this repository; *Deployment branches and
-tags* limited to tags `v*` keeps any other ref from reaching the tokens.
-
-A run that failed halfway is run again whole: both publishes skip a version already there. The
-same steps run outside a workflow with the tokens in the environment:
-
-```sh
-VSCE_PAT=... OVSX_PAT=... go tool task publish TAG=v0.2.0
-```
+How to create the two accounts, the publisher and the namespace, and the order to do it in, is
+[docs/publishing.md](docs/publishing.md).

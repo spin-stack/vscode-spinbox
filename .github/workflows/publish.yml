@@ -1,8 +1,11 @@
 name: Publish
 
 # task publish on a tag v*, a step a task: every platform's VSIX to the Visual Studio Marketplace
-# and to Open VSX, as a pre-release when the tag holds -pre. The tokens are the secrets of the
-# publish environment (README.md, Publishing); each reaches only the step that sends it.
+# and to Open VSX, as a pre-release when the tag holds -pre. Both registries trust this workflow in
+# the publish environment by OIDC (docs/publishing.md), so no token is kept: the Marketplace retires
+# personal access tokens on 2026-12-01. OVSX_PAT is only for Open VSX's first publish, before its
+# trusted publisher can be registered; once it is, the secret is deleted and ovsx exchanges the
+# job's ID token instead.
 
 on:
   push:
@@ -22,6 +25,8 @@ jobs:
     environment: publish
     permissions:
       contents: read
+      # The token each registry exchanges for a short-lived publishing credential.
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,14 +40,9 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go tool task publish:check
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
       - run: go tool task install
       - run: go tool task package:all
       - run: go tool task publish:marketplace
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
       - run: go tool task publish:openvsx
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}

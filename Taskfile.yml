@@ -80,7 +80,7 @@ tasks:
         rm -rf bin
 
   publish:
-    desc: Package every platform and publish each VSIX to the Visual Studio Marketplace and to Open VSX - what the Publish workflow runs on a tag v*, step by step. VSCE_PAT and OVSX_PAT hold the tokens; TAG=v1.2.3 names the release outside a workflow.
+    desc: Package every platform and publish each VSIX to the Visual Studio Marketplace and to Open VSX - what the Publish workflow runs on a tag v*, step by step. It authenticates by the workflow's OIDC token (docs/publishing.md), so it runs only in that workflow.
     cmds:
       - task: publish:check
       - task: package:all
@@ -88,20 +88,18 @@ tasks:
       - task: publish:openvsx
 
   publish:check:
-    desc: Fail before anything is built when a token is missing, or when the tag is not v and package.json's version - a VSIX carries the version it was packaged with, never the tag's.
+    desc: Fail before anything is built when there is no OIDC token to publish with, or when the tag is not v and package.json's version - a VSIX carries the version it was packaged with, never the tag's.
     env:
       TAG: '{{.TAG}}'
     silent: true
     cmds:
-      # An Actions secret nobody created reads as empty, and vsce or ovsx would only say "no token".
-      # Every missing one is named, so whoever creates them creates both at once.
+      # Without id-token: write, or outside Actions, both registries would only say they refused.
       - cmd: |
-          missing=$(for s in VSCE_PAT OVSX_PAT; do [ -n "$(printenv "$s")" ] || printf ' %s' "$s"; done)
-          if [ -n "$missing" ]; then
-            echo "publish: not set:$missing - secrets of this repository's 'publish' environment (README.md, Publishing)" >&2
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "publish: no OIDC token: it runs in the Publish workflow, whose job has id-token: write (docs/publishing.md)" >&2
             exit 1
           fi
-      # The Marketplace refuses a semver pre-release version, so v0.2.0-pre ships package.json's 0.2.0.
+      # The Marketplace refuses a semver pre-release version, so v0.3.0-pre ships package.json's 0.3.0.
       - cmd: |
           if [ "${TAG%%-pre*}" != "v$(node -p 'require("./package.json").version')" ]; then
             echo "publish: the tag '$TAG' is not v and package.json's version, with -pre after it for a pre-release" >&2
@@ -109,14 +107,15 @@ tasks:
           fi
 
   publish:marketplace:
-    desc: Publish every VSIX in the repository's root to the Visual Studio Marketplace, with the token in VSCE_PAT.
+    desc: Publish every VSIX in the repository's root to the Visual Studio Marketplace, as the publisher's trusted publishing policy for this workflow.
     cmds:
       # --skip-duplicate: a run that failed on Open VSX is run again whole, and what the Marketplace already has is no error.
-      - pnpm exec vsce publish --skip-duplicate {{.PRE_RELEASE}} --packagePath *.vsix
+      - pnpm exec vsce publish --oidc --skip-duplicate {{.PRE_RELEASE}} --packagePath *.vsix
 
   publish:openvsx:
-    desc: Publish every VSIX in the repository's root to Open VSX, with the token in OVSX_PAT.
+    desc: Publish every VSIX in the repository's root to Open VSX - with OVSX_PAT for the first publish, by the namespace's trusted publisher once one is registered.
     cmds:
+      # With no OVSX_PAT, ovsx exchanges the job's ID token itself (trusted publishing).
       - pnpm exec ovsx publish --skip-duplicate {{.PRE_RELEASE}} --packagePath *.vsix
 
   gate:

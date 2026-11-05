@@ -23,6 +23,11 @@ export async function run(): Promise<void> {
       join(ext.extensionPath, "test/fake-spin/spin.cjs"),
       vscode.ConfigurationTarget.Global,
     )
-  const session = await vscode.authentication.getSession("spinbox", [], { silent: true })
-  assert.equal(session?.account.label, "dev@example.com")
+  // getAccounts, not getSession: VS Code hands a session only to an extension the person allowed
+  // to use that account, even the one that registered the provider, and silent never asks.
+  const accounts = await vscode.authentication.getAccounts("spinbox")
+  assert.deepEqual(
+    accounts.map((a) => a.label),
+    ["dev@example.com"],
+  )
 }

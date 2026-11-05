@@ -1,0 +1,84 @@
+import * as vscode from "vscode"
+import { showCliError } from "../errors"
+import { readCommit } from "./editor"
+import { type OpenDeps, type OpenUi, openWorkspace, pickAndOpen } from "./open"
+import { spawnOpenCli } from "./spawn"
+import { parseOpenUri } from "./target"
+
+const ui: OpenUi = {
+  progress: (title, task) =>
+    Promise.resolve(
+      vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title, cancellable: true },
+        (_progress, token) => {
+          const abort = new AbortController()
+          token.onCancellationRequested(() => abort.abort())
+          return task(abort.signal)
+        },
+      ),
+    ),
+  pick: async (workspaces) => {
+    const picked = await vscode.window.showQuickPick(
+      workspaces.map((w) => ({
+        label: w.name,
+        description: w.state.replace("WORKSPACE_STATE_", "").toLowerCase(),
+        workspace: w,
+      })),
+      { title: "Open a Spinbox workspace", placeHolder: "Workspace" },
+    )
+    return picked?.workspace
+  },
+  openFolder: async (folderUri) => {
+    await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.parse(folderUri), {
+      forceNewWindow: true,
+    })
+  },
+  showCliError: (error, retry) => {
+    void showCliError(error, retry)
+  },
+  showError: (message) => {
+    void vscode.window.showErrorMessage(message)
+  },
+}
+
+// The spin the setting names, or the one on PATH.
+function deps(): OpenDeps {
+  const cliPath = vscode.workspace.getConfiguration("spinbox").get<string>("cliPath") || "spin"
+  return {
+    cli: spawnOpenCli({ file: cliPath }),
+    ui,
+    commit: () => readCommit(vscode.env.appRoot),
+    vscodeVersion: vscode.version,
+  }
+}
+
+// The command's argument is a workspace id, or an item of the workspaces view carrying one.
+function workspaceOf(arg: unknown): string | undefined {
+  if (typeof arg === "string") {
+    return arg
+  }
+  if (typeof arg === "object" && arg !== null && "id" in arg && typeof arg.id === "string") {
+    return arg.id
+  }
+  return undefined
+}
+
+// registerOpen registers spinbox.openWorkspace and the handler of
+// vscode://spin-stack.spinbox/open?workspace=<id>&path=<absolute path>.
+export function registerOpen(context: vscode.ExtensionContext): void {
+  context.subscriptions.push(
+    vscode.commands.registerCommand("spinbox.openWorkspace", (arg?: unknown) =>
+      pickAndOpen(deps(), workspaceOf(arg)),
+    ),
+    vscode.window.registerUriHandler({
+      handleUri: async (uri) => {
+        const parsed = parseOpenUri(uri)
+        if ("reason" in parsed) {
+          ui.showError(`Spinbox cannot open this link: ${parsed.reason}.`)
+          return
+        }
+        await openWorkspace(deps(), parsed.target)
+      },
+    }),
+  )
+}

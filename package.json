@@ -1,0 +1,115 @@
+{
+  "name": "spinbox",
+  "displayName": "Spinbox",
+  "description": "Open Spinbox workspaces in VS Code over Remote-SSH, through the spin CLI.",
+  "version": "0.0.1",
+  "publisher": "spin-stack",
+  "private": true,
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/spin-stack/vscode-spinbox"
+  },
+  "packageManager": "pnpm@11.27.1",
+  "engines": {
+    "vscode": "^1.120.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onUri",
+    "onCommand:spinbox.openWorkspace",
+    "onCommand:spinbox.signIn",
+    "onCommand:spinbox.signOut",
+    "onCommand:spinbox.refresh",
+    "onView:spinbox.workspaces"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "spinbox.openWorkspace",
+        "title": "Open Workspace",
+        "category": "Spinbox"
+      },
+      {
+        "command": "spinbox.signIn",
+        "title": "Sign In",
+        "category": "Spinbox"
+      },
+      {
+        "command": "spinbox.signOut",
+        "title": "Sign Out",
+        "category": "Spinbox"
+      },
+      {
+        "command": "spinbox.refresh",
+        "title": "Refresh",
+        "category": "Spinbox",
+        "icon": "$(refresh)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "spinbox",
+          "title": "Spinbox",
+          "icon": "media/spinbox.svg"
+        }
+      ]
+    },
+    "views": {
+      "spinbox": [
+        {
+          "id": "spinbox.workspaces",
+          "name": "Workspaces"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "spinbox.refresh",
+          "when": "view == spinbox.workspaces",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Spinbox",
+      "properties": {
+        "spinbox.telemetry": {
+          "type": "boolean",
+          "default": true,
+          "description": "Send traces of what the extension and the spin CLI do to the installation, which keeps them with its own."
+        },
+        "spinbox.cliPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "The spin CLI to run. Empty runs the one the extension carries."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:integration": "node esbuild.mjs --tests && node test/integration/run.mjs",
+    "package": "vsce package --no-dependencies --skip-license --out spinbox.vsix"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.3",
+    "@types/node": "22.20.5",
+    "@types/vscode": "1.120.0",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "4.1.0",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
+  }
+}

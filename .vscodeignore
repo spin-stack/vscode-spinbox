@@ -1,0 +1,7 @@
+# The package carries package.json, README.md, media/ and the bundle in dist/: everything else is
+# how it is built and tested.
+**
+!package.json
+!README.md
+!media/**
+!dist/extension.js

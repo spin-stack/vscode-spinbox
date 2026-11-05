@@ -1,0 +1,62 @@
+version: '3'
+
+# The VS Code extension spin-stack.spinbox: TypeScript in src/, bundled by esbuild into dist/,
+# packaged by vsce. Every install goes through Socket Firewall (go tool sfw), and every workflow
+# step is one of these tasks (go tool taskgate), so a developer runs what CI runs.
+
+tasks:
+  install:
+    desc: Install the dependencies from the lockfile, through Socket Firewall (go tool sfw).
+    cmds:
+      - go tool sfw pnpm install --frozen-lockfile
+
+  build:
+    desc: Bundle the extension into dist/extension.js.
+    cmds:
+      - pnpm build
+
+  lint:
+    desc: Lint and check the formatting with Biome.
+    cmds:
+      - pnpm lint
+
+  typecheck:
+    desc: Typecheck src/ and test/ with tsc.
+    cmds:
+      - pnpm typecheck
+
+  test:
+    desc: The unit tests (Vitest), against the fake spin in test/fake-spin/.
+    cmds:
+      - pnpm test
+
+  test:integration:
+    desc: Activate the extension in a real VS Code, downloaded into .vscode-test/. Under xvfb-run when it is installed, which CI's runner has; otherwise on the display there is.
+    vars:
+      XVFB:
+        sh: command -v xvfb-run || true
+    cmds:
+      - task: build
+      - '{{if .XVFB}}xvfb-run -a {{end}}pnpm test:integration'
+
+  package:
+    desc: Package the extension into spinbox.vsix with vsce. One package for every platform until the CLI is carried in it.
+    cmds:
+      - task: build
+      - pnpm package
+
+  gate:
+    desc: What holds the repository's shape - every install through the firewall, and every workflow step a task.
+    cmds:
+      - go tool sfw check
+      - go tool taskgate
+
+  ci:
+    desc: What CI's Gate job runs - the gate, the install, lint, typecheck, the unit tests, and the package. test:integration is its own job.
+    cmds:
+      - task: gate
+      - task: install
+      - task: lint
+      - task: typecheck
+      - task: test
+      - task: package

@@ -1,0 +1,12 @@
+# pnpm run and pnpm exec install what they find missing unless told not to, and that install goes
+# to the registry around Socket Firewall: they fail instead, and the install task goes through it.
+verifyDepsBeforeRun: error
+
+# Which dependencies may run a script when they are installed: pnpm 11 refuses the install over
+# one that is not named here.
+allowBuilds:
+  # install.js checks, and fetches if it has to, the esbuild binary for this platform.
+  esbuild: true
+  # Its postinstall picks the platform's vsce-sign binary, which signs a package for the
+  # Marketplace: vsce package runs without it, and nothing here signs yet.
+  '@vscode/vsce-sign': false

@@ -1,0 +1,28 @@
+# What the extension pins from outside it, but its npm packages (pnpm-lock.yaml), the Go tools
+# (go.mod) and the actions the workflows run (Dependabot's). It is go-tools' versions format:
+# `go tool versions version <name>` reads an entry, `go tool versions check` says what is behind.
+
+- name: spin
+  kind: git
+  source: https://github.com/spin-stack/spin
+  version: v20261105.01
+  pin: 339eadc54d37682fd438bf40a0ffe6052e0ebed7
+  track: github-release
+  note: >-
+    The release whose CLI each VSIX carries (task package:all), pulled from its public package
+    ghcr.io/spin-stack/spin-release and held by cosign to what spin's release workflow signed and
+    attested of this version. A platform the release has no CLI for gets no VSIX, and package:all
+    says so. The CLI is the extension's only client of an installation, so a bump is the CLI's
+    contract checked against src/cli/contract.ts and the extension tried against an installation
+    of that release.
+
+- name: cosign
+  kind: module
+  source: github.com/sigstore/cosign/v3/cmd/cosign
+  version: v3.1.4
+  track: github-release https://github.com/sigstore/cosign
+  note: >-
+    What checks each CLI package:all puts in a VSIX, run with go run at this version, so the
+    checksum database holds it to its bytes and no runner needs it installed. spin-machine pins
+    it too: keep the two at one version. A bump is checked with task package:all, and with a
+    binary altered by a byte, which it must refuse.

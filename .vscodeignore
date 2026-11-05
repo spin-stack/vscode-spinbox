@@ -1,7 +1,9 @@
-# The package carries package.json, README.md, media/ and the bundle in dist/: everything else is
+# The package carries package.json, README.md, media/, the bundle in dist/ and, in a platform's
+# package (task package:all), that platform's spin CLI under bin/<target>/: everything else is
 # how it is built and tested.
 **
 !package.json
 !README.md
 !media/**
 !dist/extension.js
+!bin/*/spin

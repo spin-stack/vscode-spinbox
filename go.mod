@@ -8,6 +8,7 @@ tool (
 	github.com/go-task/task/v3/cmd/task
 	github.com/spin-stack/go-tools/cmd/sfw
 	github.com/spin-stack/go-tools/cmd/taskgate
+	github.com/spin-stack/go-tools/cmd/versions
 )
 
 require (

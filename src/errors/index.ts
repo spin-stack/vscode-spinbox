@@ -1,6 +1,7 @@
 import * as vscode from "vscode"
 import { CliError, type SpinCli } from "../cli/client"
 import type { ErrorCode, ErrorEnvelope } from "../cli/contract"
+import { traceIdOf } from "../telemetry"
 
 // What showCliError needs from the rest of the extension: the CLI it updates and asks its version,
 // the Spinbox output channel that 'Show Details' opens, and the extension's own version for a
@@ -39,7 +40,7 @@ export const BUTTON = {
 // its button is chosen. Resolves once the notification is answered and its action has run. An
 // error that is not a CliError is shown as internal.
 export async function showCliError(error: unknown, retry?: Retry): Promise<void> {
-  await show(envelopeOf(error), retry, false)
+  await show(error, retry, false)
 }
 
 function envelopeOf(error: unknown): ErrorEnvelope {
@@ -50,9 +51,17 @@ function envelopeOf(error: unknown): ErrorEnvelope {
   return { error: { code: "internal", action: "details", message } }
 }
 
-async function show(env: ErrorEnvelope, retry: Retry | undefined, updated: boolean): Promise<void> {
-  const e = env.error
-  deps?.output.appendLine(`[${e.code}] ${e.message}`)
+// The trace-id of the command that failed, when it ran in a trace.
+function traceIdOfError(error: unknown): string | undefined {
+  return error instanceof CliError ? traceIdOf(error.traceparent) : undefined
+}
+
+async function show(error: unknown, retry: Retry | undefined, updated: boolean): Promise<void> {
+  const e = envelopeOf(error).error
+  const traceId = traceIdOfError(error)
+  deps?.output.appendLine(
+    `[${e.code}] ${e.message}${traceId === undefined ? "" : ` (trace ${traceId})`}`,
+  )
   const again = (opts?: RetryOptions) => runRetry(retry, opts, updated)
   switch (e.code) {
     case "cli_outdated":
@@ -82,7 +91,7 @@ async function show(env: ErrorEnvelope, retry: Retry | undefined, updated: boole
     case "unreachable":
       return offer(vscode.window.showErrorMessage, TEXT[e.code], BUTTON.retry, retry, () => again())
     case "internal":
-      return internal(e)
+      return internal(e, traceId)
   }
 }
 
@@ -157,7 +166,7 @@ async function runRetry(
   try {
     await retry(opts)
   } catch (err) {
-    await show(envelopeOf(err), retry, updated)
+    await show(err, retry, updated)
   }
 }
 
@@ -167,7 +176,7 @@ async function details(text: string): Promise<void> {
   }
 }
 
-async function internal(e: ErrorEnvelope["error"]): Promise<void> {
+async function internal(e: ErrorEnvelope["error"], traceId: string | undefined): Promise<void> {
   const choice = await vscode.window.showErrorMessage(
     withReason(TEXT.internal, e.message),
     BUTTON.details,
@@ -176,13 +185,14 @@ async function internal(e: ErrorEnvelope["error"]): Promise<void> {
   if (choice === BUTTON.details) {
     deps?.output.show(true)
   } else if (choice === BUTTON.copy) {
-    await vscode.env.clipboard.writeText(await diagnostic(e))
+    await vscode.env.clipboard.writeText(await diagnostic(e, traceId))
   }
 }
 
 // The code, the message, and every version that tells which builds met: the extension's, VS
-// Code's, the CLI's, and the installation's.
-async function diagnostic(e: ErrorEnvelope["error"]): Promise<string> {
+// Code's, the CLI's, and the installation's; and the trace-id of the command that failed, which
+// Admin -> Traces finds it by.
+async function diagnostic(e: ErrorEnvelope["error"], traceId: string | undefined): Promise<string> {
   let cli = "unknown"
   let installation = e.release ?? "unknown"
   try {
@@ -201,5 +211,6 @@ async function diagnostic(e: ErrorEnvelope["error"]): Promise<string> {
     `vscode: ${vscode.version}`,
     `cli: ${cli}`,
     `installation: ${installation}`,
+    `trace: ${traceId ?? "none"}`,
   ].join("\n")
 }

@@ -4,6 +4,13 @@ version: '3'
 # packaged by vsce. Every install goes through Socket Firewall (go tool sfw), and every workflow
 # step is one of these tasks (go tool taskgate), so a developer runs what CI runs.
 
+vars:
+  # The release a publish is for: the tag a workflow runs on, or TAG=v1.2.3 on the command line.
+  TAG: '{{.GITHUB_REF_NAME}}'
+  # A tag with -pre in it is a pre-release: vsce publishes a VSIX as one only when it was packaged
+  # as one, so package:all has to give this to vsce package too.
+  PRE_RELEASE: '{{if contains "-pre" .TAG}}--pre-release{{end}}'
+
 tasks:
   install:
     desc: Install the dependencies from the lockfile, through Socket Firewall (go tool sfw).
@@ -68,9 +75,49 @@ tasks:
         for dir in build/spin/*/; do
           target=$(basename "$dir")
           rm -rf bin && mkdir -p "bin/$target" && cp "$dir/spin" "bin/$target/spin"
-          pnpm exec vsce package --no-dependencies --skip-license --target "$target" --out "spinbox-$target.vsix"
+          pnpm exec vsce package --no-dependencies --skip-license {{.PRE_RELEASE}} --target "$target" --out "spinbox-$target.vsix"
         done
         rm -rf bin
+
+  publish:
+    desc: Package every platform and publish each VSIX to the Visual Studio Marketplace and to Open VSX - what the Publish workflow runs on a tag v*, step by step. VSCE_PAT and OVSX_PAT hold the tokens; TAG=v1.2.3 names the release outside a workflow.
+    cmds:
+      - task: publish:check
+      - task: package:all
+      - task: publish:marketplace
+      - task: publish:openvsx
+
+  publish:check:
+    desc: Fail before anything is built when a token is missing, or when the tag is not v and package.json's version - a VSIX carries the version it was packaged with, never the tag's.
+    env:
+      TAG: '{{.TAG}}'
+    silent: true
+    cmds:
+      # An Actions secret nobody created reads as empty, and vsce or ovsx would only say "no token".
+      # Every missing one is named, so whoever creates them creates both at once.
+      - cmd: |
+          missing=$(for s in VSCE_PAT OVSX_PAT; do [ -n "$(printenv "$s")" ] || printf ' %s' "$s"; done)
+          if [ -n "$missing" ]; then
+            echo "publish: not set:$missing - secrets of this repository's 'publish' environment (README.md, Publishing)" >&2
+            exit 1
+          fi
+      # The Marketplace refuses a semver pre-release version, so v0.2.0-pre ships package.json's 0.2.0.
+      - cmd: |
+          if [ "${TAG%%-pre*}" != "v$(node -p 'require("./package.json").version')" ]; then
+            echo "publish: the tag '$TAG' is not v and package.json's version, with -pre after it for a pre-release" >&2
+            exit 1
+          fi
+
+  publish:marketplace:
+    desc: Publish every VSIX in the repository's root to the Visual Studio Marketplace, with the token in VSCE_PAT.
+    cmds:
+      # --skip-duplicate: a run that failed on Open VSX is run again whole, and what the Marketplace already has is no error.
+      - pnpm exec vsce publish --skip-duplicate {{.PRE_RELEASE}} --packagePath *.vsix
+
+  publish:openvsx:
+    desc: Publish every VSIX in the repository's root to Open VSX, with the token in OVSX_PAT.
+    cmds:
+      - pnpm exec ovsx publish --skip-duplicate {{.PRE_RELEASE}} --packagePath *.vsix
 
   gate:
     desc: What holds the repository's shape - every install through the firewall, and every workflow step a task.

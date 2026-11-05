@@ -25,6 +25,7 @@ const vs = vi.hoisted(() => ({
   registerCommand: vi.fn(),
   openExternal: vi.fn(),
   writeText: vi.fn(),
+  withProgress: vi.fn(),
   env: { remoteName: undefined as string | undefined },
   workspace: { workspaceFolders: undefined as unknown, workspaceFile: undefined as unknown },
 }))
@@ -36,7 +37,7 @@ vi.mock("vscode", () => ({
     showErrorMessage: vs.showErrorMessage,
     showInformationMessage: vs.showInformationMessage,
     showQuickPick: vs.showQuickPick,
-    withProgress: (_o: unknown, task: () => Promise<unknown>) => task(),
+    withProgress: vs.withProgress,
   },
   commands: { executeCommand: vs.executeCommand, registerCommand: vs.registerCommand },
   env: {
@@ -64,6 +65,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   vs.item = { text: "", tooltip: "", show: vi.fn(), dispose: vi.fn() }
   vs.createStatusBarItem.mockImplementation(() => vs.item)
+  vs.withProgress.mockImplementation(progress())
   vs.registerCommand.mockReturnValue({ dispose: () => {} })
   vs.env.remoteName = undefined
   vs.workspace.workspaceFolders = undefined
@@ -80,6 +82,21 @@ afterEach(() => {
   vi.unstubAllEnvs()
   vi.useRealTimers()
 })
+
+// withProgress as VS Code runs it; cancel presses its Cancel once the task started.
+function progress(cancel = false) {
+  return (_o: unknown, task: (p: unknown, token: unknown) => Promise<unknown>) => {
+    const fns: (() => void)[] = []
+    const token = { onCancellationRequested: (fn: () => void) => fns.push(fn) }
+    const p = task({}, token)
+    if (cancel) {
+      setTimeout(() => {
+        for (const fn of fns) fn()
+      }, 50)
+    }
+    return p
+  }
+}
 
 // What spin workspace list answers from now on: my-ws in state, suspended when snapshot is set.
 function answer(state: string, snapshot = ""): void {
@@ -188,6 +205,37 @@ describe("Resume and Reconnect", () => {
     expect(vs.showErrorMessage).toHaveBeenCalledWith(expect.any(String), BUTTON.retry)
   })
 
+  it("updates the CLI once for a start refused as outdated, and says so when the update did not take", async () => {
+    vi.stubEnv("FAKE_SPIN_SCENARIO", join(dir, "fail.json"))
+    writeFileSync(join(dir, "fail.json"), JSON.stringify({ code: { error: "cli_outdated" } }))
+    configureErrors({
+      cli: cli(),
+      output: { appendLine: () => {}, show: () => {} },
+      extensionVersion: "0.0.0",
+    })
+    await status().resume()
+    expect(invocations().map((a) => a[0])).toEqual(["code", "update", "code"])
+    expect(vs.showErrorMessage).toHaveBeenCalledWith(
+      expect.stringContaining("The update did not take."),
+      BUTTON.details,
+    )
+    expect(vs.executeCommand).not.toHaveBeenCalledWith("workbench.action.reloadWindow")
+  })
+
+  it("Cancel stops spin code, shows nothing and does not reload", async () => {
+    vi.stubEnv("FAKE_SPIN_SCENARIO", join(dir, "slow.json"))
+    writeFileSync(
+      join(dir, "slow.json"),
+      JSON.stringify({ code: { stdout: [{ folder_uri: "x" }], delayMs: 10_000 } }),
+    )
+    vs.withProgress.mockImplementation(progress(true))
+    const started = Date.now()
+    await status().resume()
+    expect(Date.now() - started).toBeLessThan(5_000)
+    expect(vs.showErrorMessage).not.toHaveBeenCalled()
+    expect(vs.executeCommand).not.toHaveBeenCalledWith("workbench.action.reloadWindow")
+  })
+
   it("does nothing when the notification is dismissed", async () => {
     vs.showWarningMessage.mockResolvedValueOnce(undefined)
     await status().offerResume("my-ws", "suspended")
@@ -220,6 +268,22 @@ describe("the menu", () => {
     vs.showWarningMessage.mockResolvedValueOnce(MENU.stop)
     await s.menu()
     expect(invocations()).toContainEqual(["workspace", "stop", "ws-1", "-o", "json"])
+  })
+
+  it("Cancel stops spin workspace stop and shows nothing", async () => {
+    const s = status()
+    await s.poll()
+    writeFileSync(
+      join(dir, "scenario.json"),
+      JSON.stringify({ "workspace stop": { stdout: [{}], delayMs: 10_000 } }),
+    )
+    choose(MENU.stop)
+    vs.showWarningMessage.mockResolvedValueOnce(MENU.stop)
+    vs.withProgress.mockImplementation(progress(true))
+    const started = Date.now()
+    await s.menu()
+    expect(Date.now() - started).toBeLessThan(5_000)
+    expect(vs.showErrorMessage).not.toHaveBeenCalled()
   })
 
   it("does not stop it unconfirmed", async () => {

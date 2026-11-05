@@ -60,6 +60,7 @@ vi.mock("vscode", () => {
     ThemeIcon,
     ThemeColor,
     TreeItemCollapsibleState: { None: 0 },
+    ProgressLocation: { Notification: 15 },
     window: {
       createTreeView: () => {
         vs.view.visibility = undefined
@@ -303,6 +304,23 @@ describe("spinbox.workspaces", () => {
     await tree.refresh()
     expect(vs.view.message).toBe("")
     expect(tree.getChildren()).toEqual(["ws-1"])
+  })
+
+  it("updates the CLI once for a listing refused as outdated, and says so when the update did not take", async () => {
+    scenario({ "workspace list": { error: "cli_outdated" } })
+    const cli = new ProcessSpinCli({ binary: () => Promise.resolve(FAKE_SPIN), log: () => {} })
+    configureErrors({
+      cli,
+      output: { appendLine: () => {}, show: () => {} },
+      extensionVersion: "0.0.0",
+    })
+    await register()
+    await vi.waitFor(() => expect(vs.showErrorMessage).toHaveBeenCalledTimes(1))
+    expect(vs.showErrorMessage).toHaveBeenCalledWith(
+      `${TEXT.cli_outdated} The update did not take.`,
+      BUTTON.details,
+    )
+    expect(invocations().filter((a) => a[0] === "update")).toHaveLength(1)
   })
 })
 

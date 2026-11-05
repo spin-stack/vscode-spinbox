@@ -56,34 +56,33 @@ async function open(
     deps.ui.showError(`Spinbox cannot open ${target.workspace}: ${(err as Error).message}.`)
     return
   }
-  const run = async (traceparent: string | undefined): Promise<void> => {
-    let folderUri: string | undefined
-    try {
-      folderUri = await deps.ui.progress(`Opening ${target.workspace}`, async (signal) => {
-        try {
-          const r = await deps.cli.code(target.workspace, target.path, commit, {
-            start: true,
-            vscodeVersion: deps.vscodeVersion,
-            signal,
-            traceparent,
-          })
-          return r.folder_uri
-        } catch (err) {
-          if (signal.aborted) {
-            return undefined
-          }
-          throw err
+  // One attempt, which rejects with its failure; cancelling it resolves with nothing opened.
+  const attempt = async (traceparent: string | undefined): Promise<void> => {
+    const folderUri = await deps.ui.progress(`Opening ${target.workspace}`, async (signal) => {
+      try {
+        const r = await deps.cli.code(target.workspace, target.path, commit, {
+          start: true,
+          vscodeVersion: deps.vscodeVersion,
+          signal,
+          traceparent,
+        })
+        return r.folder_uri
+      } catch (err) {
+        if (signal.aborted) {
+          return undefined
         }
-      })
-    } catch (err) {
-      deps.ui.showCliError(err, () => run(deps.trace()))
-      return
-    }
+        throw err
+      }
+    })
     if (folderUri !== undefined) {
       await deps.ui.openFolder(folderUri)
     }
   }
-  await run(traceparent)
+  try {
+    await attempt(traceparent)
+  } catch (err) {
+    deps.ui.showCliError(err, () => attempt(deps.trace()))
+  }
 }
 
 // pickAndOpen opens the workspace the command names, or the one the person picks from the list;
@@ -93,26 +92,26 @@ export async function pickAndOpen(deps: OpenDeps, workspace?: string): Promise<v
     await openWorkspace(deps, { workspace })
     return
   }
-  const run = async (): Promise<void> => {
+  // One listing, and the open of what is picked from it, which shows its own failure; it
+  // rejects with the listing's failure.
+  const attempt = async (): Promise<void> => {
     const traceparent = deps.trace()
-    let picked: Workspace | undefined
-    try {
-      const items = await deps.ui.progress("Listing workspaces", (signal) =>
-        deps.cli.listWorkspaces({ signal, traceparent }).catch((err: unknown) => {
-          if (signal.aborted) {
-            return undefined
-          }
-          throw err
-        }),
-      )
-      picked = items === undefined ? undefined : await deps.ui.pick(items)
-    } catch (err) {
-      deps.ui.showCliError(err, run)
-      return
-    }
+    const items = await deps.ui.progress("Listing workspaces", (signal) =>
+      deps.cli.listWorkspaces({ signal, traceparent }).catch((err: unknown) => {
+        if (signal.aborted) {
+          return undefined
+        }
+        throw err
+      }),
+    )
+    const picked = items === undefined ? undefined : await deps.ui.pick(items)
     if (picked !== undefined) {
       await open(deps, { workspace: picked.id }, traceparent)
     }
   }
-  await run()
+  try {
+    await attempt()
+  } catch (err) {
+    deps.ui.showCliError(err, attempt)
+  }
 }

@@ -147,21 +147,29 @@ export class WorkspaceStatus implements vscode.Disposable {
   }
 
   // resume starts the workspace with `spin code --start`, which also writes its SSH config again,
-  // and reloads the window, so Remote-SSH reconnects to the same folder.
+  // and reloads the window, so Remote-SSH reconnects to the same folder. Cancelling the
+  // notification stops spin and shows nothing.
   async resume(): Promise<void> {
-    const name = this.remote.workspace
     try {
-      const commit = await this.commit()
-      await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: `Resuming ${name}` },
-        () =>
-          this.cli.code(name, undefined, commit, { start: true, vscodeVersion: vscode.version }),
-      )
+      await this.resumeOnce()
     } catch (err) {
-      await showCliError(err, () => this.resume())
-      return
+      await showCliError(err, () => this.resumeOnce())
     }
-    await vscode.commands.executeCommand("workbench.action.reloadWindow")
+  }
+
+  private async resumeOnce(): Promise<void> {
+    const name = this.remote.workspace
+    const commit = await this.commit()
+    const done = await cancellable(`Resuming ${name}`, (signal) =>
+      this.cli.code(name, undefined, commit, {
+        start: true,
+        vscodeVersion: vscode.version,
+        signal,
+      }),
+    )
+    if (done) {
+      await vscode.commands.executeCommand("workbench.action.reloadWindow")
+    }
   }
 
   async menu(): Promise<void> {
@@ -204,24 +212,49 @@ export class WorkspaceStatus implements vscode.Disposable {
   }
 
   private async runStop(): Promise<void> {
-    const id = this.workspace?.id ?? this.remote.workspace
     try {
-      await vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Notification,
-          title: `Stopping ${this.remote.workspace}`,
-        },
-        () => this.cli.run(["workspace", "stop", id]),
-      )
+      await this.stopOnce()
     } catch (err) {
-      await showCliError(err, () => this.runStop())
-      return
+      await showCliError(err, () => this.stopOnce())
     }
-    await this.poll()
+  }
+
+  private async stopOnce(): Promise<void> {
+    const id = this.workspace?.id ?? this.remote.workspace
+    const done = await cancellable(`Stopping ${this.remote.workspace}`, (signal) =>
+      this.cli.run(["workspace", "stop", id], { signal }),
+    )
+    if (done) {
+      await this.poll()
+    }
   }
 
   async copyHost(): Promise<void> {
     await vscode.env.clipboard.writeText(this.remote.host)
     void vscode.window.showInformationMessage(`Copied ${this.remote.host}.`)
   }
+}
+
+// Runs task under a notification with Cancel, which aborts the signal task's spin runs with.
+// Resolves false when it was cancelled, and rejects with any other failure.
+async function cancellable(
+  title: string,
+  task: (signal: AbortSignal) => Promise<unknown>,
+): Promise<boolean> {
+  const abort = new AbortController()
+  try {
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title, cancellable: true },
+      (_progress, token) => {
+        token.onCancellationRequested(() => abort.abort())
+        return task(abort.signal)
+      },
+    )
+  } catch (err) {
+    if (abort.signal.aborted) {
+      return false
+    }
+    throw err
+  }
+  return true
 }

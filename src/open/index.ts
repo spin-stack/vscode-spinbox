@@ -1,8 +1,8 @@
 import * as vscode from "vscode"
 import { showCliError } from "../errors"
+import { ensureRemoteExtension } from "../remote/extension"
 import { readCommit } from "./editor"
-import { type OpenDeps, type OpenUi, openWorkspace, pickAndOpen } from "./open"
-import { spawnOpenCli } from "./spawn"
+import { type OpenCli, type OpenDeps, type OpenUi, openWorkspace, pickAndOpen } from "./open"
 import { parseOpenUri } from "./target"
 
 const ui: OpenUi = {
@@ -41,11 +41,9 @@ const ui: OpenUi = {
   },
 }
 
-// The spin the setting names, or the one on PATH.
-function deps(): OpenDeps {
-  const cliPath = vscode.workspace.getConfiguration("spinbox").get<string>("cliPath") || "spin"
+function deps(cli: OpenCli): OpenDeps {
   return {
-    cli: spawnOpenCli({ file: cliPath }),
+    cli,
     ui,
     commit: () => readCommit(vscode.env.appRoot),
     vscodeVersion: vscode.version,
@@ -64,12 +62,15 @@ function workspaceOf(arg: unknown): string | undefined {
 }
 
 // registerOpen registers spinbox.openWorkspace and the handler of
-// vscode://spin-stack.spinbox/open?workspace=<id>&path=<absolute path>.
-export function registerOpen(context: vscode.ExtensionContext): void {
+// vscode://spin-stack.spinbox/open?workspace=<id>&path=<absolute path>. Neither runs spin until
+// a Remote-SSH extension is there to open what it answers.
+export function registerOpen(context: vscode.ExtensionContext, cli: OpenCli): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand("spinbox.openWorkspace", (arg?: unknown) =>
-      pickAndOpen(deps(), workspaceOf(arg)),
-    ),
+    vscode.commands.registerCommand("spinbox.openWorkspace", async (arg?: unknown) => {
+      if (await ensureRemoteExtension()) {
+        await pickAndOpen(deps(cli), workspaceOf(arg))
+      }
+    }),
     vscode.window.registerUriHandler({
       handleUri: async (uri) => {
         const parsed = parseOpenUri(uri)
@@ -77,7 +78,9 @@ export function registerOpen(context: vscode.ExtensionContext): void {
           ui.showError(`Spinbox cannot open this link: ${parsed.reason}.`)
           return
         }
-        await openWorkspace(deps(), parsed.target)
+        if (await ensureRemoteExtension()) {
+          await openWorkspace(deps(cli), parsed.target)
+        }
       },
     }),
   )

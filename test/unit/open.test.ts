@@ -1,15 +1,18 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { describe, expect, it } from "vitest"
-import { CliError } from "../../src/cli/client"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { CliError, ProcessSpinCli } from "../../src/cli/client"
 import type { Workspace } from "../../src/cli/contract"
 import { readCommit } from "../../src/open/editor"
 import { type OpenDeps, openWorkspace, pickAndOpen } from "../../src/open/open"
-import { spawnOpenCli } from "../../src/open/spawn"
 import { FAKE_SPIN } from "./fake-spin"
 
 const COMMIT = "a".repeat(40)
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
 interface Seen {
   opened: string[]
@@ -19,7 +22,7 @@ interface Seen {
   invocations(): string[][]
 }
 
-// deps runs the fake spin with env, and records what the UI was asked to do. cancel aborts each
+// deps runs the fake spin with env set for the test, and records what the UI was asked to do. cancel aborts each
 // progress as soon as it starts, as the notification's Cancel does.
 function setup(
   env: Record<string, string> = {},
@@ -39,12 +42,11 @@ function setup(
         .filter((l) => l !== "")
         .map((l) => JSON.parse(l) as string[]),
   }
+  for (const [k, v] of Object.entries({ FAKE_SPIN_LOG: log, ...env })) {
+    vi.stubEnv(k, v)
+  }
   const deps: OpenDeps = {
-    cli: spawnOpenCli({
-      file: process.execPath,
-      args: [FAKE_SPIN],
-      env: { PATH: process.env.PATH ?? "", FAKE_SPIN_LOG: log, ...env },
-    }),
+    cli: new ProcessSpinCli({ binary: () => Promise.resolve(FAKE_SPIN), log: () => {} }),
     ui: {
       progress: (_title, task) => {
         const abort = new AbortController()
@@ -123,7 +125,7 @@ describe("openWorkspace", () => {
     expect(seen.cliErrors).toHaveLength(1)
     const error = seen.cliErrors[0]?.error as CliError
     expect(error.code).toBe("internal")
-    expect(error.message).toBe("boom")
+    expect(error.message).toContain("boom")
   })
 
   it("shows nothing and opens nothing when the progress is cancelled", async () => {

@@ -11,6 +11,7 @@ export function activate(context: vscode.ExtensionContext): void {
   configureErrors({
     cli: spin.cli,
     output: spin.output,
+    binary: spin.binary,
     extensionVersion: String(context.extension.packageJSON.version),
   })
   registerOpen(context, spin.cli)

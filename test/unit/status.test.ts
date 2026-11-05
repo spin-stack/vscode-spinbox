@@ -211,6 +211,7 @@ describe("Resume and Reconnect", () => {
     configureErrors({
       cli: cli(),
       output: { appendLine: () => {}, show: () => {} },
+      binary: () => Promise.resolve(FAKE_SPIN),
       extensionVersion: "0.0.0",
     })
     await status().resume()

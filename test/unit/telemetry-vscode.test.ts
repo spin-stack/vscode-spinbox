@@ -92,6 +92,7 @@ describe("Copy Diagnostics", () => {
     configureErrors({
       cli: s.cli,
       output: { appendLine: vi.fn(), show: vi.fn() },
+      binary: () => Promise.resolve(FAKE_SPIN),
       extensionVersion: "0.0.1",
     })
     vi.stubEnv("FAKE_SPIN_ERROR", "internal")
@@ -107,6 +108,7 @@ describe("Copy Diagnostics", () => {
     configureErrors({
       cli: { run: vi.fn(), version: vi.fn().mockRejectedValue(new Error("x")) },
       output: { appendLine: vi.fn(), show: vi.fn() },
+      binary: () => Promise.resolve(FAKE_SPIN),
       extensionVersion: "0.0.1",
     })
     vs.showErrorMessage.mockResolvedValueOnce(BUTTON.copy)

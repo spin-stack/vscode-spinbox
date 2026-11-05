@@ -79,9 +79,13 @@ const CASES: Case[] = [
   },
   {
     code: "not_signed_in",
+    setup: () => vs.executeCommand.mockResolvedValue(true),
     text: TEXT.not_signed_in,
     button: BUTTON.signIn,
-    did: () => expect(vs.executeCommand).toHaveBeenCalledWith("spinbox.signIn"),
+    did: (retry) => {
+      expect(vs.executeCommand).toHaveBeenCalledWith("spinbox.signIn")
+      expect(retry).toHaveBeenCalledWith(undefined)
+    },
   },
   {
     code: "workspace_stopped",
@@ -178,6 +182,15 @@ describe("showCliError", () => {
     expect(cli.run).toHaveBeenCalledOnce()
     expect(retry).toHaveBeenCalledOnce()
     expect(shown().buttons).toEqual([BUTTON.details])
+  })
+
+  it("not_signed_in: a sign-in that did not complete runs nothing again", async () => {
+    const retry = vi.fn<Retry>()
+    vs.executeCommand.mockResolvedValue(false)
+    click(BUTTON.signIn)
+    await showCliError(cliError("not_signed_in"), retry)
+    expect(vs.executeCommand).toHaveBeenCalledWith("spinbox.signIn")
+    expect(retry).not.toHaveBeenCalled()
   })
 
   it("internal: Copy Diagnostics copies the code, the message and the versions", async () => {

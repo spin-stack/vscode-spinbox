@@ -1,5 +1,6 @@
 // Command spinbin puts the spin CLI a VSIX carries under -out, one directory per VS Code target
-// (-out/linux-x64/spin), each checked before it is put there:
+// (-out/linux-x64/spin), each checked before it is put there, with the release it is beside it
+// (-out/linux-x64/VERSION), which the extension reads to know when to install it:
 //
 //	go run ./hack/spinbin -version v20261105.01 -out build/spin -cosign 'go run ...cosign@v3.1.4'
 //
@@ -138,7 +139,7 @@ func run(ctx context.Context, c config) error {
 }
 
 // one pulls p's CLI and bundles into work, checks them, and only then moves the CLI to
-// out/<target>/spin.
+// out/<target>/spin, with the version in out/<target>/VERSION.
 func one(ctx context.Context, c config, r *client, p platform, work string) error {
 	name := "spin-" + p.release
 	layers, err := r.manifest(ctx, c.version+"-"+name)
@@ -160,6 +161,9 @@ func one(ctx context.Context, c config, r *client, p platform, work string) erro
 		return err
 	}
 	if err := os.Chmod(bin, 0o755); err != nil { //nolint:gosec // a program
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "VERSION"), []byte(c.version+"\n"), 0o644); err != nil { //nolint:gosec // read by the extension, not a secret
 		return err
 	}
 	return os.Rename(bin, filepath.Join(dir, "spin"))

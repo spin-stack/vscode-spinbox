@@ -58,10 +58,12 @@ async function show(env: ErrorEnvelope, retry: Retry | undefined, updated: boole
     case "cli_outdated":
       return updated ? details(`${TEXT.cli_outdated} The update did not take.`) : update(retry)
     case "not_signed_in":
+      // spinbox.signIn answers whether the person signed in; only then is the command run again.
       if (
-        (await vscode.window.showWarningMessage(TEXT.not_signed_in, BUTTON.signIn)) !== undefined
+        (await vscode.window.showWarningMessage(TEXT.not_signed_in, BUTTON.signIn)) !== undefined &&
+        (await vscode.commands.executeCommand<boolean>("spinbox.signIn")) === true
       ) {
-        await vscode.commands.executeCommand("spinbox.signIn")
+        await again()
       }
       return
     case "workspace_stopped":

@@ -215,6 +215,30 @@ describe("ProcessSpinCli kills a hung spin", () => {
     expect(spin.pids().map(alive)).toEqual([false])
   })
 
+  it("whose child holds its stdout open", async () => {
+    const binary = join(tmp(), "spin")
+    writeFileSync(binary, "#!/bin/sh\nsleep 20 &\nexec sleep 20\n")
+    chmodSync(binary, 0o755)
+    const started = Date.now()
+    const e = (await rejection(cli({ version: 300 }, binary).cli.version())) as CliError
+    expect(Date.now() - started).toBeLessThan(5_000)
+    expect(e.code).toBe("internal")
+  })
+
+  it("not when it answered and a child it left running holds its stdout open", async () => {
+    const binary = join(tmp(), "spin")
+    writeFileSync(
+      binary,
+      `#!/bin/sh\nsleep 20 &\necho '{"cli":"v20261105.01","profile":"default","endpoint":"e","signed_in":true}'\n`,
+    )
+    chmodSync(binary, 0o755)
+    const started = Date.now()
+    await expect(cli({ version: 10_000 }, binary).cli.version()).resolves.toMatchObject({
+      cli: "v20261105.01",
+    })
+    expect(Date.now() - started).toBeLessThan(5_000)
+  })
+
   it("not while login waits within the code's lifetime", async () => {
     vi.stubEnv("FAKE_SPIN_LOGIN_DELAY_MS", "3000")
     await expect(cli({ login: 1500 }).cli.login(() => {})).resolves.toMatchObject({

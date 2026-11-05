@@ -3,21 +3,20 @@ import { chmod, copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "n
 import { join } from "node:path"
 
 // The CLI the extension runs: the spinbox.cliPath setting when it names one, otherwise the copy of
-// the CLI the VSIX carries in bin/<platform>/spin, installed into the extension's global storage.
+// the CLI the VSIX carries in bin/<target>/spin, installed into the extension's global storage.
 // That path stays the same across versions of the extension, so the SSH config spin writes, which
 // names it as the ProxyCommand, keeps working after the extension updates.
 //
-// The VSIX carries bin/<platform>/VERSION beside the binary: the spin release it is. The installed
+// The VSIX carries bin/<target>/VERSION beside the binary: the spin release it is. The installed
 // copy keeps its own VERSION beside it, and is replaced when the carried release is newer.
 
-// spin's release names: spin-<os>-<arch>, as Go names them.
-const GOOS: Partial<Record<NodeJS.Platform, string>> = { linux: "linux", darwin: "darwin" }
-const GOARCH: Partial<Record<NodeJS.Architecture, string>> = { x64: "amd64", arm64: "arm64" }
+// The VS Code targets the extension is published for, which name the directory task package:all
+// puts each one's CLI in (hack/spinbin's platforms): <platform>-<arch>, as Node names them.
+const PLATFORMS: ReadonlySet<string> = new Set(["linux", "darwin"])
+const ARCHES: ReadonlySet<string> = new Set(["x64", "arm64"])
 
-export function platformDir(platform: NodeJS.Platform, arch: NodeJS.Architecture): string | null {
-  const os = GOOS[platform]
-  const cpu = GOARCH[arch]
-  return os && cpu ? `${os}-${cpu}` : null
+export function targetDir(platform: NodeJS.Platform, arch: NodeJS.Architecture): string | null {
+  return PLATFORMS.has(platform) && ARCHES.has(arch) ? `${platform}-${arch}` : null
 }
 
 // There is no spin to run: the setting names nothing runnable, or the VSIX carries no CLI for this
@@ -70,7 +69,7 @@ export class SpinBinary {
   private async install(): Promise<string> {
     const platform = this.opts.platform ?? process.platform
     const arch = this.opts.arch ?? process.arch
-    const dir = platformDir(platform, arch)
+    const dir = targetDir(platform, arch)
     if (!dir) {
       throw new SpinNotFoundError(
         `Spinbox carries no spin CLI for ${platform}-${arch}: set spinbox.cliPath to one.`,

@@ -50,17 +50,6 @@ function deps(cli: OpenCli): OpenDeps {
   }
 }
 
-// The command's argument is a workspace id, or an item of the workspaces view carrying one.
-function workspaceOf(arg: unknown): string | undefined {
-  if (typeof arg === "string") {
-    return arg
-  }
-  if (typeof arg === "object" && arg !== null && "id" in arg && typeof arg.id === "string") {
-    return arg.id
-  }
-  return undefined
-}
-
 // registerOpen registers spinbox.openWorkspace and the handler of
 // vscode://spin-stack.spinbox/open?workspace=<id>&path=<absolute path>. Neither runs spin until
 // a Remote-SSH extension is there to open what it answers.
@@ -68,7 +57,7 @@ export function registerOpen(context: vscode.ExtensionContext, cli: OpenCli): vo
   context.subscriptions.push(
     vscode.commands.registerCommand("spinbox.openWorkspace", async (arg?: unknown) => {
       if (await ensureRemoteExtension()) {
-        await pickAndOpen(deps(cli), workspaceOf(arg))
+        await pickAndOpen(deps(cli), typeof arg === "string" ? arg : undefined)
       }
     }),
     vscode.window.registerUriHandler({

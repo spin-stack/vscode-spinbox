@@ -21,10 +21,7 @@
   "activationEvents": [
     "onUri",
     "onCommand:spinbox.openWorkspace",
-    "onCommand:spinbox.signIn",
-    "onCommand:spinbox.signOut",
-    "onCommand:spinbox.refresh",
-    "onView:spinbox.workspaces"
+    "onCommand:spinbox.signIn"
   ],
   "contributes": {
     "commands": [
@@ -37,45 +34,8 @@
         "command": "spinbox.signIn",
         "title": "Sign In",
         "category": "Spinbox"
-      },
-      {
-        "command": "spinbox.signOut",
-        "title": "Sign Out",
-        "category": "Spinbox"
-      },
-      {
-        "command": "spinbox.refresh",
-        "title": "Refresh",
-        "category": "Spinbox",
-        "icon": "$(refresh)"
       }
     ],
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "spinbox",
-          "title": "Spinbox",
-          "icon": "media/spinbox.svg"
-        }
-      ]
-    },
-    "views": {
-      "spinbox": [
-        {
-          "id": "spinbox.workspaces",
-          "name": "Workspaces"
-        }
-      ]
-    },
-    "menus": {
-      "view/title": [
-        {
-          "command": "spinbox.refresh",
-          "when": "view == spinbox.workspaces",
-          "group": "navigation"
-        }
-      ]
-    },
     "configuration": {
       "title": "Spinbox",
       "properties": {

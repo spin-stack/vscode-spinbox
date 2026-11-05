@@ -23,14 +23,18 @@
     "onCommand:spinbox.openWorkspace",
     "onCommand:spinbox.signIn",
     "onCommand:spinbox.signOut",
-    "onAuthenticationRequest:spinbox"
+    "onAuthenticationRequest:spinbox",
+    "onCommand:spinbox.refresh",
+    "onCommand:spinbox.startWorkspace",
+    "onCommand:spinbox.stopWorkspace"
   ],
   "contributes": {
     "commands": [
       {
         "command": "spinbox.openWorkspace",
         "title": "Open Workspace",
-        "category": "Spinbox"
+        "category": "Spinbox",
+        "icon": "$(link-external)"
       },
       {
         "command": "spinbox.signIn",
@@ -41,6 +45,24 @@
         "command": "spinbox.signOut",
         "title": "Sign Out",
         "category": "Spinbox"
+      },
+      {
+        "command": "spinbox.refresh",
+        "title": "Refresh Workspaces",
+        "category": "Spinbox",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "spinbox.startWorkspace",
+        "title": "Start Workspace",
+        "category": "Spinbox",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "spinbox.stopWorkspace",
+        "title": "Stop Workspace",
+        "category": "Spinbox",
+        "icon": "$(debug-stop)"
       }
     ],
     "authentication": [
@@ -49,6 +71,82 @@
         "label": "Spinbox"
       }
     ],
+    "views": {
+      "explorer": [
+        {
+          "id": "spinbox.workspaces",
+          "name": "Spinbox Workspaces"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "spinbox.workspaces",
+        "contents": "Sign in to Spinbox to see your workspaces.\n[Sign In](command:spinbox.workspaces.signIn)",
+        "when": "spinbox.workspaces == signedOut"
+      },
+      {
+        "view": "spinbox.workspaces",
+        "contents": "You have no Spinbox workspaces.",
+        "when": "spinbox.workspaces == listed"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "spinbox.startWorkspace",
+          "when": "false"
+        },
+        {
+          "command": "spinbox.stopWorkspace",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "spinbox.refresh",
+          "when": "view == spinbox.workspaces",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "spinbox.openWorkspace",
+          "when": "view == spinbox.workspaces && viewItem =~ /^workspace\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "spinbox.startWorkspace",
+          "when": "view == spinbox.workspaces && viewItem =~ /\\bstartable\\b/",
+          "group": "inline@2"
+        },
+        {
+          "command": "spinbox.stopWorkspace",
+          "when": "view == spinbox.workspaces && viewItem =~ /\\bstoppable\\b/",
+          "group": "inline@3"
+        },
+        {
+          "command": "spinbox.openWorkspace",
+          "when": "view == spinbox.workspaces && viewItem =~ /^workspace\\b/",
+          "group": "navigation@1"
+        },
+        {
+          "command": "spinbox.startWorkspace",
+          "when": "view == spinbox.workspaces && viewItem =~ /\\bstartable\\b/",
+          "group": "navigation@2"
+        },
+        {
+          "command": "spinbox.stopWorkspace",
+          "when": "view == spinbox.workspaces && viewItem =~ /\\bstoppable\\b/",
+          "group": "navigation@3"
+        },
+        {
+          "command": "spinbox.refresh",
+          "when": "view == spinbox.workspaces",
+          "group": "navigation@4"
+        }
+      ]
+    },
     "configuration": {
       "title": "Spinbox",
       "properties": {

@@ -10,11 +10,24 @@ export type ErrorCode =
   | "workspace_stopped"
   | "workspace_failed"
   | "access_needs_signature"
+  // This machine holds a key the caller registered that their keyring does not list yet.
+  | "keyring_needs_signature"
+  // This machine holds none of the caller's registered keys.
+  | "no_key_held"
   | "no_capacity"
   | "unreachable"
   | "internal"
 
-export type Action = "update" | "login" | "start" | "open_dashboard" | "sign" | "retry" | "details"
+export type Action =
+  | "update"
+  | "login"
+  | "start"
+  | "open_dashboard"
+  | "sign"
+  | "sign_keyring"
+  | "add_key"
+  | "retry"
+  | "details"
 
 // The table in #833, as a type and as a value: a code missing from either fails typecheck.
 export const ACTION_OF = {
@@ -23,6 +36,8 @@ export const ACTION_OF = {
   workspace_stopped: "start",
   workspace_failed: "open_dashboard",
   access_needs_signature: "sign",
+  keyring_needs_signature: "sign_keyring",
+  no_key_held: "add_key",
   no_capacity: "retry",
   unreachable: "retry",
   internal: "details",
@@ -38,8 +53,9 @@ export interface ErrorEnvelope {
     // The release the installation runs, with cli_outdated.
     release?: string
     workspace_id?: string
-    // A page that resolves it: the signature page for access_needs_signature, the workspace's
-    // dashboard page for workspace_failed.
+    // A page that resolves it: the signature page for access_needs_signature, the page where a
+    // passkey signs the keyring for keyring_needs_signature, the workspace's dashboard page for
+    // workspace_failed.
     url?: string
   }
 }

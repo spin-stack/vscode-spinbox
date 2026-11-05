@@ -1,23 +1,40 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
+import { hostname, tmpdir } from "node:os"
+import { join } from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { CliError } from "../../src/cli/client"
 import type { ErrorCode, ErrorEnvelope } from "../../src/cli/contract"
 import { ACTION_OF, ERROR_CODES } from "../../src/cli/contract"
-import { BUTTON, configureErrors, type Retry, showCliError, TEXT } from "../../src/errors"
+import {
+  BUTTON,
+  configureErrors,
+  KEYRING_SIGNED,
+  keyToAdd,
+  type Retry,
+  showCliError,
+  TEXT,
+} from "../../src/errors"
 
 const vs = vi.hoisted(() => ({
   showErrorMessage: vi.fn(),
   showWarningMessage: vi.fn(),
+  showInformationMessage: vi.fn(),
   withProgress: vi.fn(async (_o: unknown, task: () => Promise<unknown>) => task()),
   executeCommand: vi.fn(),
   openExternal: vi.fn(),
   writeText: vi.fn(),
+  createTerminal: vi.fn(),
+  onDidCloseTerminal: vi.fn(),
 }))
 
 vi.mock("vscode", () => ({
   window: {
     showErrorMessage: vs.showErrorMessage,
     showWarningMessage: vs.showWarningMessage,
+    showInformationMessage: vs.showInformationMessage,
     withProgress: vs.withProgress,
+    createTerminal: vs.createTerminal,
+    onDidCloseTerminal: vs.onDidCloseTerminal,
   },
   commands: { executeCommand: vs.executeCommand },
   env: { openExternal: vs.openExternal, clipboard: { writeText: vs.writeText } },
@@ -48,11 +65,36 @@ function click(button: string | undefined): void {
   vs.showWarningMessage.mockResolvedValueOnce(button)
 }
 
+const SPIN = "/opt/spin/bin/spin"
+
+// A terminal the extension opens ends, once it is shown, with the exit code this says.
+let exitCode: number | undefined
+
+// A home whose ~/.ssh holds each of names, with nothing else in it.
+function home(...names: string[]): string {
+  const dir = mkdtempSync(join(tmpdir(), "spinbox-home-"))
+  for (const name of names) {
+    mkdirSync(join(dir, name, ".."), { recursive: true })
+    writeFileSync(join(dir, name), "ssh-ed25519 AAAA test\n")
+  }
+  vi.stubEnv("HOME", dir)
+  return dir
+}
+
 beforeEach(() => {
   vi.resetAllMocks()
+  vi.unstubAllEnvs()
   vs.withProgress.mockImplementation(async (_o, task) => task())
   cli.version.mockResolvedValue({ cli: "v20261105.01", installation: "v20261104.01" })
-  configureErrors({ cli, output, extensionVersion: "0.0.1" })
+  exitCode = 0
+  const terminal = { show: vi.fn(), sendText: vi.fn(), exitStatus: undefined as unknown }
+  vs.createTerminal.mockReturnValue(terminal)
+  vs.onDidCloseTerminal.mockImplementation((listener: (t: unknown) => void) => {
+    terminal.exitStatus = { code: exitCode }
+    queueMicrotask(() => listener(terminal))
+    return { dispose: vi.fn() }
+  })
+  configureErrors({ cli, output, binary: () => Promise.resolve(SPIN), extensionVersion: "0.0.1" })
 })
 
 interface Case {
@@ -67,6 +109,7 @@ interface Case {
 }
 
 const URL = "https://app.spinbox.test/w/ws-1"
+const SIGN_URL = "https://term.spinbox.test/#/sign"
 
 const CASES: Case[] = [
   {
@@ -106,6 +149,39 @@ const CASES: Case[] = [
     text: TEXT.access_needs_signature,
     button: BUTTON.sign,
     did: () => expect(String(vs.openExternal.mock.calls[0]?.[0])).toBe(URL),
+  },
+  {
+    // The page opens, and the notification left behind runs the command again.
+    code: "keyring_needs_signature",
+    extra: { url: SIGN_URL },
+    setup: () => vs.showInformationMessage.mockResolvedValueOnce(BUTTON.retry),
+    text: TEXT.keyring_needs_signature,
+    button: BUTTON.sign,
+    did: (retry) => {
+      expect(String(vs.openExternal.mock.calls[0]?.[0])).toBe(SIGN_URL)
+      expect(vs.showInformationMessage).toHaveBeenCalledWith(KEYRING_SIGNED, BUTTON.retry)
+      expect(retry).toHaveBeenCalledWith(undefined)
+    },
+  },
+  {
+    // spin ssh-key add runs in a terminal with the key spin connects with; it ending well retries.
+    code: "no_key_held",
+    setup: () => home(".ssh/id_ed25519.pub"),
+    text: TEXT.no_key_held,
+    button: BUTTON.addKey,
+    did: (retry) => {
+      expect(vs.createTerminal).toHaveBeenCalledWith({
+        name: "Spinbox: Add Key",
+        shellPath: SPIN,
+        shellArgs: [
+          "ssh-key",
+          "add",
+          hostname(),
+          join(process.env.HOME ?? "", ".ssh", "id_ed25519.pub"),
+        ],
+      })
+      expect(retry).toHaveBeenCalledWith(undefined)
+    },
   },
   {
     code: "no_capacity",
@@ -150,7 +226,58 @@ describe("showCliError", () => {
     expect(retry).not.toHaveBeenCalled()
     expect(vs.executeCommand).not.toHaveBeenCalled()
     expect(vs.openExternal).not.toHaveBeenCalled()
+    expect(vs.createTerminal).not.toHaveBeenCalled()
     expect(output.show).not.toHaveBeenCalled()
+  })
+
+  it("keyring_needs_signature: the page opened and Retry not chosen, runs nothing again", async () => {
+    const retry = vi.fn<Retry>()
+    click(BUTTON.sign)
+    await showCliError(cliError("keyring_needs_signature", { url: SIGN_URL }), retry)
+    expect(vs.openExternal).toHaveBeenCalledOnce()
+    expect(retry).not.toHaveBeenCalled()
+  })
+
+  it("keyring_needs_signature: without a url, offers no page to open", async () => {
+    await showCliError(cliError("keyring_needs_signature"), vi.fn<Retry>())
+    expect(shown().buttons).toEqual([])
+  })
+
+  it("no_key_held: a terminal that did not end well runs nothing again", async () => {
+    const retry = vi.fn<Retry>()
+    home(".ssh/id_ed25519.pub")
+    exitCode = 1
+    click(BUTTON.addKey)
+    await showCliError(cliError("no_key_held"), retry)
+    expect(vs.createTerminal).toHaveBeenCalledOnce()
+    expect(retry).not.toHaveBeenCalled()
+  })
+
+  it("no_key_held: with no key, the terminal has the command that makes one and adds it, not run", async () => {
+    const dir = home()
+    click(BUTTON.addKey)
+    await showCliError(cliError("no_key_held"), vi.fn<Retry>())
+    expect(vs.createTerminal).toHaveBeenCalledWith({ name: "Spinbox: Add Key" })
+    const made = join(dir, ".ssh", "id_ed25519")
+    const terminal = vs.createTerminal.mock.results[0]?.value as {
+      sendText: ReturnType<typeof vi.fn>
+    }
+    expect(terminal.sendText).toHaveBeenCalledWith(
+      `ssh-keygen -t ed25519 -f "${made}" && "${SPIN}" ssh-key add "${hostname()}" "${made}.pub"`,
+      false,
+    )
+  })
+
+  it("the key added is the one spin connects with: ~/.ssh's usual ones in order, then spin's own", () => {
+    expect(keyToAdd(home())).toBeUndefined()
+    const spins = home(".spin/ssh/id_ed25519.pub", ".ssh/id_other.pub")
+    expect(keyToAdd(spins)).toBe(join(spins, ".spin", "ssh", "id_ed25519.pub"))
+    const ecdsa = home(".spin/ssh/id_ed25519.pub", ".ssh/id_ecdsa.pub")
+    expect(keyToAdd(ecdsa)).toBe(join(ecdsa, ".ssh", "id_ecdsa.pub"))
+    const rsa = home(".ssh/id_ecdsa.pub", ".ssh/id_rsa.pub")
+    expect(keyToAdd(rsa)).toBe(join(rsa, ".ssh", "id_rsa.pub"))
+    const ed = home(".ssh/id_rsa.pub", ".ssh/id_ed25519.pub")
+    expect(keyToAdd(ed)).toBe(join(ed, ".ssh", "id_ed25519.pub"))
   })
 
   it("cli_outdated: runs spin update and retries, showing nothing", async () => {

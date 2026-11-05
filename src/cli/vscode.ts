@@ -7,6 +7,8 @@ export interface Spin {
   cli: ProcessSpinCli
   // The 'Spinbox' output channel: each command's exit and the CLI's stderr. Show details opens it.
   output: vscode.OutputChannel
+  // The path of the spin the extension runs, for a command run in a terminal.
+  binary: () => Promise<string>
 }
 
 // The SpinCli the extension runs: spinbox.cliPath, or the CLI the VSIX carries installed into
@@ -25,5 +27,5 @@ export function createSpin(context: vscode.ExtensionContext): Spin {
     log: (text) => output.append(text),
     trace,
   })
-  return { cli, output }
+  return { cli, output, binary: () => binary.path() }
 }

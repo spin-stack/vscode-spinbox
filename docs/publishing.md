@@ -17,6 +17,7 @@ What a person does, once, in this order:
 | 3 | Open VSX | An Eclipse account, the Publisher Agreement, the namespace `spin-stack`, a token | 15 min |
 | 4 | Here | The first release, a pre-release | 15 min |
 | 5 | Open VSX | Claim the namespace and register the trusted publisher; delete the token | days (a person at Eclipse reviews the claim) |
+| 6 | GitHub | Make the package `vscode-spinbox-release` public, after the first release pushed it | 2 min |
 
 ## 1. GitHub: the `publish` environment
 
@@ -103,7 +104,8 @@ You need the GitHub account you will log in to open-vsx.org with.
 3. **Watch the run.** Actions → **Publish**, approving it if you set a reviewer.
    - Its first job, **GitHub release**, needs no account: it attaches the VSIXs, `SHA256SUMS` and
      their signature to the tag's release before either registry is asked, so the release is
-     there to install from even when a registry refuses.
+     there to install from even when a registry refuses. The same job pushes those files to
+     `ghcr.io/spin-stack/vscode-spinbox-release`, which the first push creates private (step 6).
    - A run that fails halfway is run again whole: both registries skip a version they already
      have.
    - Its first step fails, saying why, if the job has no OIDC token.
@@ -140,9 +142,42 @@ You need the GitHub account you will log in to open-vsx.org with.
 3. **Drop the token.** Delete the environment secret `OVSX_PAT`, and revoke the token in
    **Settings → Access Tokens**. With no token, `ovsx` exchanges the job's ID token by itself.
 
+## 6. ghcr: make the package public
+
+`spin vscode install` pulls the extension anonymously from
+`ghcr.io/spin-stack/vscode-spinbox-release`. GitHub creates a package private on its first push,
+and a package linked to a repository takes that repository's access permissions but not its
+visibility; nor is there a REST endpoint that changes it. So, once, after
+the first run of Publish has pushed the package (step 4):
+
+1. You need the admin role on the package: an owner of `spin-stack` has it on every package of the
+   organization.
+2. The organization must allow public packages: **spin-stack → Settings → Packages → Package
+   creation**, with **Public** checked. `spin-stack/spin-release` is public, so it already is.
+3. Open **spin-stack → Packages** (<https://github.com/orgs/spin-stack/packages>), and select
+   `vscode-spinbox-release`.
+4. Select **Package settings** on the right.
+5. Under **Danger Zone**, select **Change visibility**, choose **Public**, and confirm as the
+   dialog asks (it has you type the package's name).
+6. Check it from a machine with no GitHub login: `spin vscode install` of the spin release that
+   release carries installs it, or
+
+   ```sh
+   curl -s 'https://ghcr.io/token?scope=repository:spin-stack/vscode-spinbox-release:pull'
+   ```
+
+   answers `{"token":...}`; while the package is private it answers `DENIED`.
+
+A public package cannot be made private again. That is what is wanted: everything in it is in
+the public registries too, and what the CLI trusts is the signature, not the package.
+
+While the package is private, or before the first push, `spin vscode install` fails with
+`no_extension_release`, saying the package is missing or not public.
+
 ## Sources
 
 - [Publishing Extensions](https://code.visualstudio.com/api/working-with-extensions/publishing-extension), VS Code: the publisher, trusted publishing, the PAT retirement, platform-specific and pre-release versions.
 - [Publishing Extensions](https://github.com/eclipse/openvsx/wiki/Publishing-Extensions), Open VSX wiki: the Eclipse account, the agreement, tokens, `create-namespace`.
 - [Namespace Access](https://github.com/eclipse/openvsx/wiki/Namespace-Access), Open VSX wiki: claiming a namespace, members.
 - [Trusted Publishing](https://github.com/eclipse-openvsx/openvsx/wiki/Trusted-Publishing), Open VSX wiki: the trusted publisher, private repositories.
+- [Configuring a package's access control and visibility](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility), GitHub: private on first publish, visibility not inherited, who may change it, public cannot go back.

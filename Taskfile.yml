@@ -85,6 +85,7 @@ tasks:
       - task: publish:check
       - task: package:all
       - task: publish:github
+      - task: publish:ghcr
       - task: publish:marketplace
       - task: publish:openvsx
 
@@ -115,6 +116,24 @@ tasks:
       - gh release view {{.TAG}} >/dev/null 2>&1 || gh release create {{.TAG}} --verify-tag --title {{.TAG}} --notes-file {{.NOTES}} --prerelease={{.PRE}} {{.OUT}}/*
       - gh release upload {{.TAG}} --clobber {{.OUT}}/*
       - gh release edit {{.TAG}} --notes-file {{.NOTES}} --prerelease={{.PRE}}
+
+  # The GitHub release again, as a public package: this repository is private, so its releases
+  # are a 404 to `spin vscode install`, which reads this package instead. The package is
+  # transport; what the CLI trusts is the signature publish:github made and verified.
+  publish:ghcr:
+    desc: >-
+      Push what publish:github laid out and signed (every VSIX, spin-release.txt, SHA256SUMS and
+      SHA256SUMS.sigstore.json) to ghcr.io's vscode-spinbox-release with oras, as one artifact
+      tagged with the extension's tag and spin-<release> - spin-<release>-pre for a pre-release -
+      the tag `spin vscode install` of that spin release asks for (hack/ghcrpush). Run again, it
+      pushes the same files and moves both tags to them. Needs GH_TOKEN with packages write and
+      oras on the PATH.
+    vars:
+      PACKAGE: ghcr.io/spin-stack/vscode-spinbox-release
+      SOURCE: '{{.GITHUB_SERVER_URL}}/{{.GITHUB_REPOSITORY}}'
+    cmds:
+      - printf '%s' "${GH_TOKEN}" | oras login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+      - go run ./hack/ghcrpush -release build/release -tag {{.TAG}} -package {{.PACKAGE}} -source {{.SOURCE}}
 
   publish:check:
     desc: Fail before anything is built when there is no OIDC token to publish with, or when the tag is not v and package.json's version - a VSIX carries the version it was packaged with, never the tag's.

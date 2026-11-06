@@ -1,98 +1,51 @@
 # Spinbox for VS Code
 
-The VS Code extension `spin-stack.spinbox`: opens Spinbox workspaces in VS Code over Remote-SSH.
-It talks to Spinbox through the `spin` CLI alone, by the JSON contract in
-[spin-stack/spin#833](https://github.com/spin-stack/spin/issues/833); `src/cli/contract.ts` is
-that contract as types.
+Open your Spinbox workspaces in VS Code over Remote-SSH: list them, start and stop them, and open
+one in a new window, without leaving the editor.
 
-## Developing
+## Requirements
 
-Needs Go (the tools are pinned in `go.mod`), Node 22 and pnpm.
+- VS Code 1.120 or newer, or an editor built on it that installs from Open VSX (VSCodium,
+  Cursor, ...).
+- A Remote-SSH extension: Microsoft's `ms-vscode-remote.remote-ssh` in VS Code, or
+  `jeanp413.open-remote-ssh` elsewhere. When none is installed, Spinbox offers to install the one
+  your editor's marketplace carries.
+- A Spinbox account, with an SSH key of this machine added to it. If none is, Spinbox says so and
+  offers to add one.
 
-```sh
-go tool task install            # dependencies, through Socket Firewall
-go tool task test               # unit tests (Vitest), against the fake spin in test/fake-spin/
-go tool task test:integration   # the extension activated in a real VS Code; needs a display
-go tool task ci                 # what CI runs
-```
+The extension carries the `spin` CLI it needs, for Linux and macOS on x64 and arm64: there is
+nothing else to install.
 
-F5 in VS Code runs the extension in an Extension Development Host (`.vscode/launch.json`).
+## Getting started
 
-`test/fake-spin/spin.cjs` answers every command and every error code of the contract, from
-environment variables or a scenario file: its header says how.
+1. Install **Spinbox** from the Extensions view.
+2. Open **Spinbox Workspaces** in the Explorer and select **Sign In**, or run
+   **Spinbox: Sign In** from the Command Palette. Spinbox then shows in the Accounts menu.
+3. Select a workspace's **Open Workspace** action. A stopped workspace is started first; it opens
+   in a new window over Remote-SSH.
 
-## Following spin
+## Features
 
-Every VSIX carries the spin CLI of one spin release, the one `versions.yaml` pins as `spin`, and a
-CLI speaks only to an installation of its own release; so the extension follows each spin release.
-[spin-stack/shipset](https://github.com/spin-stack/shipset) dispatches
-`.github/workflows/bump-spin.yml` with each spin release newer than the pin (input `release`; the
-run is named `spin <release>`, which is how shipset finds it again). The run:
+- **Spinbox Workspaces** in the Explorer: every workspace with its state, and actions to open,
+  start, stop and refresh.
+- **Commands**: Open Workspace, Start Workspace, Stop Workspace, Refresh Workspaces, Sign In and
+  Sign Out, under **Spinbox** in the Command Palette.
+- **Links**: `vscode://spin-stack.spinbox/open?workspace=<id>` opens a workspace from a browser,
+  and `&path=<absolute path>` a folder inside it.
+- **Errors you can act on**: an outdated CLI, a missing SSH key or no room for a workspace each say
+  what fixes it, with a button for it where there is one.
 
-1. stops, successfully, when the release is not newer than the pin (`task spin:newer`);
-2. bumps the pin (`task spin:bump`, `go tool versions bump spin <release>`), reading the tag's
-   commit from spin with a read-only token of the release app;
-3. runs `task ci` and `task package:all`, which pulls that release's CLI for every platform it has
-   one for and checks each with cosign;
-4. commits as the release app (spin-stack-release), force-pushes `spin/next`, and opens the pull
-   request there, or rewrites the one open (`task spin:propose`, `hack/spinpropose`).
+## Settings
 
-One branch, rewritten by each run: what waits there is always the newest release, and a newer one
-replaces commits added to it. The pull request is opened by the app, not by the run's own token, so
-CI and Package run on it. Merging it, after checking the CLI's contract against
-`src/cli/contract.ts` and trying the extension against an installation of that release, and then
-tagging the extension, are a person's. The run needs the app's key as the secret `RELEASE_APP_KEY`.
+| Setting | Default | What |
+|---|---|---|
+| `spinbox.cliPath` | empty | The `spin` CLI to run. Empty runs the one the extension carries. |
+| `spinbox.telemetry` | `true` | Join each operation to the trace of the `spin` command it runs. Off, the CLI still traces its own commands unless its profile sets `telemetry: false`. |
 
-To bump by hand, `go tool versions bump spin <release>` and `go tool task package:all`.
+## Contributing
 
-## Publishing
+How to build, test and release the extension is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-A tag `v*` pushed to this repository runs `.github/workflows/publish.yml`. It packages every
-platform once (`task package:all`), makes the tag's GitHub release (`task publish:github`),
-pushes the same files to the public package `ghcr.io/spin-stack/vscode-spinbox-release`
-(`task publish:ghcr`), and then publishes the same VSIXs to the Visual Studio Marketplace (`vsce`) and to Open VSX (`ovsx`).
-The tag is `v` followed by `package.json`'s `version`.
+## License
 
-The GitHub release comes first, in a job of its own, so it exists whether or not a registry is set
-up or answers. It holds:
-
-| File | What |
-|---|---|
-| `spinbox-<target>.vsix` | One per platform: `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64` |
-| `spin-release.txt` | The one spin release every VSIX's CLI is (`bin/<target>/VERSION`) |
-| `SHA256SUMS` | `sha256sum` of the VSIXs and `spin-release.txt` |
-| `SHA256SUMS.sigstore.json` | cosign's keyless signature of `SHA256SUMS`, as `publish.yml` at the tag |
-
-The same files go to a public package as well, so a spin CLI can pull them anonymously, the
-way spin publishes its own CLIs (`ghcr.io/spin-stack/spin-release`): one OCI artifact per tag,
-pushed with oras (`hack/ghcrpush`), each file a layer named by its file name.
-
-| Tag of `ghcr.io/spin-stack/vscode-spinbox-release` | What |
-|---|---|
-| `<tag>` (`v0.4.0`) | The release's files, as above |
-| `spin-<release>` (`spin-v20261106.01`) | The same artifact: the release last pushed whose VSIXs carry that spin release |
-| `spin-<release>-pre` | The same, for a pre-release, so one never takes the tag a release holds |
-
-The manifest's `org.opencontainers.image.version` is the extension's tag. `spin vscode install`,
-run by a spin CLI, pulls `spin-<its release>` anonymously (then `spin-<its release>-pre`), holds
-`SHA256SUMS.sigstore.json` to `publish.yml` at the tag the manifest names, the VSIX and
-`spin-release.txt` to `SHA256SUMS`, and installs the VSIX into VS Code. The package is transport:
-a tag moved to another artifact can only point at another release this workflow signed. By hand,
-`oras pull ghcr.io/spin-stack/vscode-spinbox-release:<tag>`, the `cosign verify-blob` line the
-release notes say, and then `code --install-extension spinbox-<target>.vsix`.
-
-The package is made private by its first push, and nothing installs from it until someone makes
-it public, once: [docs/publishing.md](docs/publishing.md#6-ghcr-make-the-package-public). A tag with `-pre`
-after it (`v0.3.0-pre`) publishes that version as a pre-release: the Marketplace takes no semver
-pre-release versions, and its convention is an odd minor for pre-releases.
-
-```sh
-git tag v0.3.0-pre && git push origin v0.3.0-pre   # package.json says "version": "0.3.0"
-```
-
-Both registries trust the workflow by OIDC in the GitHub environment `publish`, so it keeps no
-token. A run that failed halfway is run again whole: both registries skip a version they already
-have.
-
-How to create the two accounts, the publisher and the namespace, and the order to do it in, is
-[docs/publishing.md](docs/publishing.md).
+[Apache-2.0](LICENSE)

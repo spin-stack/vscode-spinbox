@@ -1,7 +1,9 @@
 name: Publish
 
 # On a tag v*, a step a task: every platform's VSIX packaged once, attached to a GitHub release of
-# the tag with SHA256SUMS signed by this workflow (job release), then published to the Visual
+# the tag with SHA256SUMS signed by this workflow and pushed with them to the public package
+# ghcr.io/spin-stack/vscode-spinbox-release, which `spin vscode install` reads while this
+# repository's releases are a 404 to it (job release), then published to the Visual
 # Studio Marketplace and to Open VSX (job publish), as a pre-release when the tag holds -pre. The
 # release comes first and on its own: it exists, and is installable, whether or not a registry is
 # set up yet or answers. Both registries trust this workflow in the publish environment by OIDC
@@ -30,6 +32,9 @@ jobs:
       # Keyless signing: cosign exchanges the job's ID token for a certificate naming this
       # workflow at the tag, which is what `spin vscode install` holds SHA256SUMS to.
       id-token: write
+      # The same files, pushed to the public package ghcr.io/spin-stack/vscode-spinbox-release,
+      # which is what `spin vscode install` reads while this repository's releases are a 404.
+      packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -49,6 +54,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+      # The tool and the pin spin's release workflow pushes its own package with.
+      - uses: oras-project/setup-oras@005458ad77f1c8facd38a094e4af2e69e5607ff4 # v2.0.2
+      - run: go tool task publish:ghcr
+        env:
+          GH_TOKEN: ${{ github.token }}
       # The registries publish these very bytes, the ones SHA256SUMS lists, not a second package.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

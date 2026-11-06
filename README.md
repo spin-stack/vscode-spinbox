@@ -24,8 +24,26 @@ environment variables or a scenario file: its header says how.
 ## Publishing
 
 A tag `v*` pushed to this repository runs `.github/workflows/publish.yml`. It packages every
-platform (`task package:all`) and publishes each VSIX to the Visual Studio Marketplace (`vsce`)
-and to Open VSX (`ovsx`). The tag is `v` followed by `package.json`'s `version`. A tag with `-pre`
+platform once (`task package:all`), makes the tag's GitHub release (`task publish:github`), and
+then publishes the same VSIXs to the Visual Studio Marketplace (`vsce`) and to Open VSX (`ovsx`).
+The tag is `v` followed by `package.json`'s `version`.
+
+The GitHub release comes first, in a job of its own, so it exists whether or not a registry is set
+up or answers. It holds:
+
+| File | What |
+|---|---|
+| `spinbox-<target>.vsix` | One per platform: `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64` |
+| `spin-release.txt` | The one spin release every VSIX's CLI is (`bin/<target>/VERSION`) |
+| `SHA256SUMS` | `sha256sum` of the VSIXs and `spin-release.txt` |
+| `SHA256SUMS.sigstore.json` | cosign's keyless signature of `SHA256SUMS`, as `publish.yml` at the tag |
+
+`spin vscode install`, run by a spin CLI, finds the release whose `spin-release.txt` is its own
+release, checks the signature and the SHA-256, and installs that VSIX into VS Code. By hand,
+the release notes say the `cosign verify-blob` line, and then
+`code --install-extension spinbox-<target>.vsix`. While this repository is private, its releases
+answer 404 to anyone without access, `spin vscode install` included; someone with access
+downloads them with `gh release download <tag> -R spin-stack/vscode-spinbox`. A tag with `-pre`
 after it (`v0.3.0-pre`) publishes that version as a pre-release: the Marketplace takes no semver
 pre-release versions, and its convention is an odd minor for pre-releases.
 

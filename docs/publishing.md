@@ -106,6 +106,9 @@ You need the GitHub account you will log in to open-vsx.org with.
    ```
 
 3. **Watch the run.** Actions → **Publish**, approving it if you set a reviewer.
+   - Its first job, **GitHub release**, needs no account: it attaches the VSIXs, `SHA256SUMS` and
+     their signature to the tag's release before either registry is asked, so the release is
+     there to install from even when a registry refuses.
    - A run that fails halfway is run again whole: both registries skip a version they already
      have.
    - Its first step fails, saying why, if the job has no OIDC token.

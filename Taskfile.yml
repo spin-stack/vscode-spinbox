@@ -80,12 +80,41 @@ tasks:
         rm -rf bin
 
   publish:
-    desc: Package every platform and publish each VSIX to the Visual Studio Marketplace and to Open VSX - what the Publish workflow runs on a tag v*, step by step. It authenticates by the workflow's OIDC token (docs/publishing.md), so it runs only in that workflow.
+    desc: Package every platform, attach each VSIX to the tag's GitHub release, and publish each to the Visual Studio Marketplace and to Open VSX - what the Publish workflow runs on a tag v*, step by step. It authenticates by the workflow's OIDC token (docs/publishing.md), so it runs only in that workflow.
     cmds:
       - task: publish:check
       - task: package:all
+      - task: publish:github
       - task: publish:marketplace
       - task: publish:openvsx
+
+  publish:github:
+    desc: >-
+      The tag's GitHub release, with every VSIX package:all made, spin-release.txt (the one spin
+      release they all carry), SHA256SUMS of those files, and SHA256SUMS.sigstore.json - cosign's
+      keyless signature of SHA256SUMS as this workflow at the tag, verified before anything is
+      uploaded. `spin vscode install` finds the release by spin-release.txt and holds the VSIX to
+      both. A pre-release when the tag holds -pre. A release the tag already has gets these files
+      again, over the ones it had: a run is run again whole. Needs GH_TOKEN and the job's OIDC token.
+    vars:
+      COSIGN:
+        sh: echo "go run github.com/sigstore/cosign/v3/cmd/cosign@$(go tool versions version cosign)"
+      OUT: build/release
+      NOTES: build/release-notes.md
+      # Who signs: this workflow at the tag, as spin's internal/vsix demands it.
+      IDENTITY: '{{.GITHUB_SERVER_URL}}/{{.GITHUB_REPOSITORY}}/.github/workflows/publish.yml@{{.GITHUB_REF}}'
+      PRE: '{{if .PRE_RELEASE}}true{{else}}false{{end}}'
+    cmds:
+      - go run ./hack/ghrelease -spin build/spin -vsix . -out {{.OUT}} -notes {{.NOTES}} -tag {{.TAG}} -identity {{.IDENTITY}}
+      - '{{.COSIGN}} sign-blob --yes --bundle {{.OUT}}/SHA256SUMS.sigstore.json {{.OUT}}/SHA256SUMS'
+      # A signature nothing verifies is a step that can quietly stop working: one that does not
+      # check fails here, before anything is published.
+      - '{{.COSIGN}} verify-blob --bundle {{.OUT}}/SHA256SUMS.sigstore.json --certificate-identity {{.IDENTITY}} --certificate-oidc-issuer https://token.actions.githubusercontent.com {{.OUT}}/SHA256SUMS'
+      # Created with its files at once, so no release is ever listed without them; a run made
+      # again whole puts this run's files and notes over the last one's.
+      - gh release view {{.TAG}} >/dev/null 2>&1 || gh release create {{.TAG}} --verify-tag --title {{.TAG}} --notes-file {{.NOTES}} --prerelease={{.PRE}} {{.OUT}}/*
+      - gh release upload {{.TAG}} --clobber {{.OUT}}/*
+      - gh release edit {{.TAG}} --notes-file {{.NOTES}} --prerelease={{.PRE}}
 
   publish:check:
     desc: Fail before anything is built when there is no OIDC token to publish with, or when the tag is not v and package.json's version - a VSIX carries the version it was packaged with, never the tag's.

@@ -21,6 +21,30 @@ F5 in VS Code runs the extension in an Extension Development Host (`.vscode/laun
 `test/fake-spin/spin.cjs` answers every command and every error code of the contract, from
 environment variables or a scenario file: its header says how.
 
+## Following spin
+
+Every VSIX carries the spin CLI of one spin release, the one `versions.yaml` pins as `spin`, and a
+CLI speaks only to an installation of its own release; so the extension follows each spin release.
+[spin-stack/shipset](https://github.com/spin-stack/shipset) dispatches
+`.github/workflows/bump-spin.yml` with each spin release newer than the pin (input `release`; the
+run is named `spin <release>`, which is how shipset finds it again). The run:
+
+1. stops, successfully, when the release is not newer than the pin (`task spin:newer`);
+2. bumps the pin (`task spin:bump`, `go tool versions bump spin <release>`), reading the tag's
+   commit from spin with a read-only token of the release app;
+3. runs `task ci` and `task package:all`, which pulls that release's CLI for every platform it has
+   one for and checks each with cosign;
+4. commits as the release app (spin-stack-release), force-pushes `spin/next`, and opens the pull
+   request there, or rewrites the one open (`task spin:propose`, `hack/spinpropose`).
+
+One branch, rewritten by each run: what waits there is always the newest release, and a newer one
+replaces commits added to it. The pull request is opened by the app, not by the run's own token, so
+CI and Package run on it. Merging it, after checking the CLI's contract against
+`src/cli/contract.ts` and trying the extension against an installation of that release, and then
+tagging the extension, are a person's. The run needs the app's key as the secret `RELEASE_APP_KEY`.
+
+To bump by hand, `go tool versions bump spin <release>` and `go tool task package:all`.
+
 ## Publishing
 
 A tag `v*` pushed to this repository runs `.github/workflows/publish.yml`. It packages every

@@ -19,9 +19,6 @@ What a person does, once, in this order:
 | 5 | Open VSX | Claim the namespace and register the trusted publisher; delete the token | days (a person at Eclipse reviews the claim) |
 | 6 | GitHub | Make the package `vscode-spinbox-release` public, after the first release pushed it | 2 min |
 
-Do steps 2 and 4 within 48 hours of each other. In a private repository, the Marketplace activates
-a policy only when a run uses it within 48 hours of its creation.
-
 ## 1. GitHub: the `publish` environment
 
 1. In this repository, open **Settings → Environments → New environment**, and name it `publish`.
@@ -56,8 +53,6 @@ organization when publishing is by trusted publishing.
       | Environment | `publish` |
 
    3. Select **Create**.
-   4. Run the first publish (step 4) within **48 hours**: the repository is private, and the first
-      successful exchange is what activates the policy for good.
 3. **Add people.** In the publisher's **Members**, add whoever else should manage it.
 
 Later, once the publisher has had an extension listed for 6 months, it can verify the domain
@@ -143,18 +138,16 @@ You need the GitHub account you will log in to open-vsx.org with.
       | Workflow filename | `publish.yml` |
       | Environment name | `publish` |
 
-   3. A private repository also asks for a one-time registration code, valid for 7 days. If the
-      dialog offers no GitHub provider, or refuses a private repository, keep the token and look
-      again later.
+   3. If the dialog offers no GitHub provider, keep the token and look again later.
 3. **Drop the token.** Delete the environment secret `OVSX_PAT`, and revoke the token in
    **Settings → Access Tokens**. With no token, `ovsx` exchanges the job's ID token by itself.
 
 ## 6. ghcr: make the package public
 
-`spin vscode install` pulls the extension anonymously from `ghcr.io/spin-stack/vscode-spinbox-release`,
-because this repository's releases answer 404 to anyone without access. GitHub creates a package
-private on its first push, and a package linked to a repository takes that repository's access
-permissions but not its visibility; nor is there a REST endpoint that changes it. So, once, after
+`spin vscode install` pulls the extension anonymously from
+`ghcr.io/spin-stack/vscode-spinbox-release`. GitHub creates a package private on its first push,
+and a package linked to a repository takes that repository's access permissions but not its
+visibility; nor is there a REST endpoint that changes it. So, once, after
 the first run of Publish has pushed the package (step 4):
 
 1. You need the admin role on the package: an owner of `spin-stack` has it on every package of the
@@ -180,13 +173,6 @@ the public registries too, and what the CLI trusts is the signature, not the pac
 
 While the package is private, or before the first push, `spin vscode install` fails with
 `no_extension_release`, saying the package is missing or not public.
-
-## Open before the first public listing
-
-- **License.** `package.json` says `UNLICENSED`, and the VSIX is packaged with `--skip-license`.
-  A public listing should say under what terms people may install it.
-- **The repository is private.** The listing shows `README.md`, and its links into this repository
-  answer 404 to everyone else.
 
 ## Sources
 

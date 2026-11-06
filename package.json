@@ -5,7 +5,7 @@
   "version": "0.0.1",
   "publisher": "spin-stack",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/spin-stack/vscode-spinbox"
@@ -185,7 +185,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:integration": "node esbuild.mjs --tests && node test/integration/run.mjs",
-    "package": "vsce package --no-dependencies --skip-license --out spinbox.vsix"
+    "package": "vsce package --no-dependencies --out spinbox.vsix"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.3",

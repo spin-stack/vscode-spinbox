@@ -63,10 +63,9 @@ up or answers. It holds:
 | `SHA256SUMS` | `sha256sum` of the VSIXs and `spin-release.txt` |
 | `SHA256SUMS.sigstore.json` | cosign's keyless signature of `SHA256SUMS`, as `publish.yml` at the tag |
 
-While this repository is private its releases answer 404 to anyone without access, so the same
-files go to a public package as well, the way spin publishes its own CLIs
-(`ghcr.io/spin-stack/spin-release`): one OCI artifact per tag, pushed with oras
-(`hack/ghcrpush`), each file a layer named by its file name.
+The same files go to a public package as well, so a spin CLI can pull them anonymously, the
+way spin publishes its own CLIs (`ghcr.io/spin-stack/spin-release`): one OCI artifact per tag,
+pushed with oras (`hack/ghcrpush`), each file a layer named by its file name.
 
 | Tag of `ghcr.io/spin-stack/vscode-spinbox-release` | What |
 |---|---|

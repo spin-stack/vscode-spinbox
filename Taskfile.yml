@@ -75,7 +75,7 @@ tasks:
         for dir in build/spin/*/; do
           target=$(basename "$dir")
           rm -rf bin && mkdir -p "bin/$target" && cp "$dir/spin" "$dir/VERSION" "bin/$target/"
-          pnpm exec vsce package --no-dependencies --skip-license {{.PRE_RELEASE}} --target "$target" --out "spinbox-$target.vsix"
+          pnpm exec vsce package --no-dependencies {{.PRE_RELEASE}} --target "$target" --out "spinbox-$target.vsix"
         done
         rm -rf bin
 

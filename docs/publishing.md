@@ -18,9 +18,6 @@ What a person does, once, in this order:
 | 4 | Here | The first release, a pre-release | 15 min |
 | 5 | Open VSX | Claim the namespace and register the trusted publisher; delete the token | days (a person at Eclipse reviews the claim) |
 
-Do steps 2 and 4 within 48 hours of each other. In a private repository, the Marketplace activates
-a policy only when a run uses it within 48 hours of its creation.
-
 ## 1. GitHub: the `publish` environment
 
 1. In this repository, open **Settings → Environments → New environment**, and name it `publish`.
@@ -55,8 +52,6 @@ organization when publishing is by trusted publishing.
       | Environment | `publish` |
 
    3. Select **Create**.
-   4. Run the first publish (step 4) within **48 hours**: the repository is private, and the first
-      successful exchange is what activates the policy for good.
 3. **Add people.** In the publisher's **Members**, add whoever else should manage it.
 
 Later, once the publisher has had an extension listed for 6 months, it can verify the domain
@@ -141,18 +136,9 @@ You need the GitHub account you will log in to open-vsx.org with.
       | Workflow filename | `publish.yml` |
       | Environment name | `publish` |
 
-   3. A private repository also asks for a one-time registration code, valid for 7 days. If the
-      dialog offers no GitHub provider, or refuses a private repository, keep the token and look
-      again later.
+   3. If the dialog offers no GitHub provider, keep the token and look again later.
 3. **Drop the token.** Delete the environment secret `OVSX_PAT`, and revoke the token in
    **Settings → Access Tokens**. With no token, `ovsx` exchanges the job's ID token by itself.
-
-## Open before the first public listing
-
-- **License.** `package.json` says `UNLICENSED`, and the VSIX is packaged with `--skip-license`.
-  A public listing should say under what terms people may install it.
-- **The repository is private.** The listing shows `README.md`, and its links into this repository
-  answer 404 to everyone else.
 
 ## Sources
 

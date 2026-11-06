@@ -65,9 +65,7 @@ up or answers. It holds:
 `spin vscode install`, run by a spin CLI, finds the release whose `spin-release.txt` is its own
 release, checks the signature and the SHA-256, and installs that VSIX into VS Code. By hand,
 the release notes say the `cosign verify-blob` line, and then
-`code --install-extension spinbox-<target>.vsix`. While this repository is private, its releases
-answer 404 to anyone without access, `spin vscode install` included; someone with access
-downloads them with `gh release download <tag> -R spin-stack/vscode-spinbox`. A tag with `-pre`
+`code --install-extension spinbox-<target>.vsix`. A tag with `-pre`
 after it (`v0.3.0-pre`) publishes that version as a pre-release: the Marketplace takes no semver
 pre-release versions, and its convention is an odd minor for pre-releases.
 

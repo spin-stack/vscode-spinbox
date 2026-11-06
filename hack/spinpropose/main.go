@@ -1,0 +1,143 @@
+// Command spinpropose is the Bump spin workflow's last step (.github/workflows/bump-spin.yml says
+// what and why): versions.yaml's spin, already bumped to -release and checked by task ci and task
+// package:all, committed and pushed to spin/next as the app whose token GH_TOKEN is and whose slug
+// -app is, and the pull request there opened - or rewritten, when the app has one open:
+//
+//	GH_TOKEN=<the app's> go run ./hack/spinpropose -release v20261106.01 -app spin-stack-release
+//
+// As the app so CI and Package run on the pull request, which one opened with a workflow's own
+// token would not start, and so spin-stack/shipset, which waits only on what the app proposed,
+// sees it. One branch, rewritten by each run: what waits there is always the newest release.
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"os/exec"
+	"strconv"
+	"strings"
+)
+
+const branch = "spin/next"
+
+func main() {
+	var p proposal
+	flag.StringVar(&p.release, "release", "", "the spin release versions.yaml was bumped to")
+	flag.StringVar(&p.app, "app", "", "the app's slug, whose token GH_TOKEN is")
+	flag.StringVar(&p.spin, "spin", "build/spin", "package:spin's output: a directory per platform with a CLI")
+	flag.Parse()
+	p.run = os.Getenv("GITHUB_SERVER_URL") + "/" + os.Getenv("GITHUB_REPOSITORY") + "/actions/runs/" + os.Getenv("GITHUB_RUN_ID")
+	p.sh = shell
+	url, err := p.open()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "spinpropose:", err)
+		os.Exit(1)
+	}
+	fmt.Println(url)
+}
+
+// proposal is one release's pull request: the release, the app, the run that checked it, where
+// package:spin put the CLIs, and the commands it runs - a test gives its own.
+type proposal struct {
+	release, app, run, spin string
+	sh                      func(name string, args ...string) (string, error)
+}
+
+// shell is a command's standard output, trimmed; what it said on standard error is in the error.
+func shell(name string, args ...string) (string, error) {
+	out, err := exec.Command(name, args...).Output() //nolint:gosec // this command's own git and gh, with the release in their arguments
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		return "", fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, strings.TrimSpace(string(exit.Stderr)))
+	}
+	return strings.TrimSpace(string(out)), err
+}
+
+// open commits and pushes the bump, and opens the pull request or rewrites the one open; its
+// answer is the pull request's URL.
+func (p proposal) open() (string, error) {
+	if p.release == "" || p.app == "" {
+		return "", errors.New("-release and -app are required")
+	}
+	// The platforms package:all made a VSIX of are the ones the release has a CLI for.
+	dirs, err := os.ReadDir(p.spin)
+	if err != nil {
+		return "", fmt.Errorf("no CLIs to name: %w", err)
+	}
+	var targets []string
+	for _, d := range dirs {
+		if d.IsDir() {
+			targets = append(targets, d.Name())
+		}
+	}
+	if len(targets) == 0 {
+		return "", fmt.Errorf("%s holds no CLI: package:all makes them", p.spin)
+	}
+
+	// Committed as the app: the bot's noreply address needs its user id.
+	if _, err := p.sh("gh", "auth", "setup-git"); err != nil {
+		return "", err
+	}
+	out, err := p.sh("gh", "api", "/users/"+p.app+"[bot]")
+	if err != nil {
+		return "", err
+	}
+	var user struct {
+		ID int `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(out), &user); err != nil || user.ID == 0 {
+		return "", fmt.Errorf("gh api /users/%s[bot]: no id in %q", p.app, out)
+	}
+	title := "versions: spin " + p.release
+	for _, args := range [][]string{
+		{"config", "user.name", p.app + "[bot]"},
+		{"config", "user.email", fmt.Sprintf("%d+%s[bot]@users.noreply.github.com", user.ID, p.app)},
+		{"checkout", "-q", "-B", branch},
+		{"commit", "-q", "-m", title, "-m", "The release whose CLI every VSIX carries, checked by " + p.run + ".", "versions.yaml"},
+		{"push", "-q", "--force", "origin", branch},
+	} {
+		if _, err := p.sh("git", args...); err != nil {
+			return "", err
+		}
+	}
+
+	// Only the app's own: anyone may open a pull request from a fork's branch of the same name.
+	out, err = p.sh("gh", "pr", "list", "--head", branch, "--author", "app/"+p.app, "--state", "open", "--json", "number,url")
+	if err != nil {
+		return "", err
+	}
+	var prs []struct {
+		Number int    `json:"number"`
+		URL    string `json:"url"`
+	}
+	if err := json.Unmarshal([]byte(out), &prs); err != nil {
+		return "", fmt.Errorf("gh pr list: %w", err)
+	}
+	b := body(p.release, p.run, targets)
+	if len(prs) == 0 {
+		return p.sh("gh", "pr", "create", "--head", branch, "--base", "main", "--title", title, "--body", b)
+	}
+	// The branch was just rewritten: its title and body say what it holds now.
+	if _, err := p.sh("gh", "pr", "edit", strconv.Itoa(prs[0].Number), "--title", title, "--body", b); err != nil {
+		return "", err
+	}
+	return prs[0].URL, nil
+}
+
+// body is the pull request's: the release, what the run checked, and what is left to a person.
+func body(release, run string, targets []string) string {
+	return "Moves versions.yaml's spin to [spin " + release + "](https://github.com/spin-stack/spin/releases/tag/" + release + "): " +
+		"the release whose CLI every VSIX carries, which speaks only to an installation of that same release.\n\n" +
+		"Checked by [the run that proposed it](" + run + "):\n\n" +
+		"- `task ci`: the gate, the install through Socket Firewall, lint, typecheck, the unit tests and the package.\n" +
+		"- `task package:all`: the CLI of " + release + " for every platform it has one for (" + strings.Join(targets, ", ") + "), " +
+		"pulled from ghcr.io/spin-stack/spin-release and held by cosign to what spin's release workflow signed and attested of " +
+		release + ", and a VSIX of each.\n\n" +
+		"Left to whoever merges it, as versions.yaml's note says: the CLI's contract against `src/cli/contract.ts`, " +
+		"and the extension tried against an installation of " + release + ". A tag then publishes it.\n\n" +
+		"spin-stack/shipset dispatches this for each spin release (`.github/workflows/bump-spin.yml`); " +
+		"a newer one rewrites this branch and this pull request, commits added here included.\n"
+}

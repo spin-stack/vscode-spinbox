@@ -147,6 +147,31 @@ tasks:
       # With no OVSX_PAT, ovsx exchanges the job's ID token itself (trusted publishing).
       - pnpm exec ovsx publish --skip-duplicate {{.PRE_RELEASE}} --packagePath *.vsix
 
+  spin:newer:
+    desc: Whether GIVEN, a spin release, is newer than versions.yaml's spin, as release=<it or nothing> - the Bump spin workflow's first step (go tool versions newer).
+    cmds:
+      - |
+        set -euo pipefail
+        newer=$(go tool versions newer spin "${GIVEN}")
+        echo "release=${newer}" >> "${GITHUB_OUTPUT:-/dev/stdout}"
+
+  spin:bump:
+    desc: Pin versions.yaml's spin at RELEASE (go tool versions bump), which asks spin's repository for the tag's commit over git - with GH_TOKEN as git's credentials when it is set, since spin is private.
+    requires:
+      vars: [RELEASE]
+    cmds:
+      # In the workflow, the only credentials git has are the app's read token; a developer's own
+      # git already reaches spin.
+      - '[ -z "${GH_TOKEN:-}" ] || gh auth setup-git'
+      - go tool versions bump spin "{{.RELEASE}}"
+
+  spin:propose:
+    desc: Commit versions.yaml's spin at RELEASE, push it to spin/next and open or rewrite the pull request there, as the app GH_TOKEN and APP_SLUG name (hack/spinpropose) - the Bump spin workflow's last step, after task ci and task package:all.
+    requires:
+      vars: [RELEASE, APP_SLUG]
+    cmds:
+      - go run ./hack/spinpropose -release "{{.RELEASE}}" -app "{{.APP_SLUG}}"
+
   gate:
     desc: What holds the repository's shape - every install through the firewall, and every workflow step a task.
     cmds:

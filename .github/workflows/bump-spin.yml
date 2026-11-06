@@ -1,0 +1,103 @@
+name: Bump spin
+
+# A spin release, proposed here: versions.yaml's spin moved to it, checked the way a bump is - task
+# ci, and task package:all, which pulls that release's CLI for every platform and holds each to
+# what spin's release workflow signed with cosign - and a pull request on spin/next. One branch,
+# rewritten by each run, so what waits there is always the newest release: a CLI speaks to an
+# installation of its own release alone, and the extension follows each one. A person reads it,
+# merges it, and tags the extension.
+#
+# spin-stack/shipset dispatches this with each spin release newer than the pin, and finds the run
+# again by its name. As the release app (spin-stack-release), as shipset's other hops propose: a
+# pull request opened with this run's own token would start none of CI and Package, and shipset
+# waits only on one the app opened. Two tokens, each for one thing: spin is private, and the bump
+# reads its tag's commit over git; the pull request is written here.
+run-name: spin ${{ inputs.release }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'The spin release, v<YYYYMMDD>.<NN>.'
+        required: true
+
+# A newer release dispatched while an older one runs is the one that matters: both write spin/next.
+concurrency:
+  group: bump-spin
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  bump:
+    name: Bump
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Without this run's read-only token in the clone's configuration: checkout leaves it as a
+      # header every git push sends, ahead of the app's credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      # No store cache, as in ci.yml: Socket Firewall sees only what is asked of the registry.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      # Only a release newer than the pin: a run dispatched twice, or by hand with an old one,
+      # proposes nothing. A name that is not a release fails here.
+      - name: Newer than the pin
+        id: newer
+        env:
+          GIVEN: ${{ inputs.release }}
+        run: go tool task spin:newer
+
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        if: steps.newer.outputs.release != ''
+        id: read
+        with:
+          client-id: Iv23licJKNgsPIM00SD0 # spin-stack-release's client ID, public: app-id is deprecated
+          private-key: ${{ secrets.RELEASE_APP_KEY }}
+          owner: spin-stack
+          repositories: spin
+          permission-contents: read
+
+      - name: Bump
+        if: steps.newer.outputs.release != ''
+        env:
+          GH_TOKEN: ${{ steps.read.outputs.token }}
+          RELEASE: ${{ steps.newer.outputs.release }}
+        run: go tool task spin:bump
+
+      - name: Check
+        if: steps.newer.outputs.release != ''
+        run: go tool task ci
+
+      - name: Package every platform
+        if: steps.newer.outputs.release != ''
+        run: go tool task package:all
+
+      # Made after the checks, which take longer than nothing: the token lives an hour.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        if: steps.newer.outputs.release != ''
+        id: write
+        with:
+          client-id: Iv23licJKNgsPIM00SD0 # spin-stack-release's client ID, public: app-id is deprecated
+          private-key: ${{ secrets.RELEASE_APP_KEY }}
+          owner: spin-stack
+          repositories: vscode-spinbox
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Propose it
+        if: steps.newer.outputs.release != ''
+        env:
+          GH_TOKEN: ${{ steps.write.outputs.token }}
+          APP_SLUG: ${{ steps.write.outputs.app-slug }}
+          RELEASE: ${{ steps.newer.outputs.release }}
+        run: go tool task spin:propose

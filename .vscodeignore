@@ -1,10 +1,11 @@
-# The package carries package.json, README.md, LICENSE, the bundle in dist/ and, in a platform's package
-# (task package:all), that platform's spin CLI and its VERSION under bin/<target>/: everything
-# else is how it is built and tested.
+# The package carries package.json, README.md, LICENSE, the icon, the bundle in dist/ and, in a
+# platform's package (task package:all), that platform's spin CLI and its VERSION under
+# bin/<target>/: everything else is how it is built and tested.
 **
 !package.json
 !README.md
 !LICENSE
+!images/icon.png
 !dist/extension.js
 !bin/*/spin
 !bin/*/VERSION

@@ -4,11 +4,20 @@
   "description": "Open Spinbox workspaces in VS Code over Remote-SSH, through the spin CLI.",
   "version": "0.0.2",
   "publisher": "spin-stack",
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#111827",
+    "theme": "dark"
+  },
   "private": true,
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/spin-stack/vscode-spinbox"
+  },
+  "homepage": "https://github.com/spin-stack/vscode-spinbox#readme",
+  "bugs": {
+    "url": "https://github.com/spin-stack/vscode-spinbox/issues"
   },
   "packageManager": "pnpm@11.27.1",
   "engines": {
@@ -16,6 +25,23 @@
   },
   "categories": [
     "Other"
+  ],
+  "keywords": [
+    "spinbox",
+    "spin",
+    "remote",
+    "remote-ssh",
+    "ssh",
+    "remote development",
+    "cloud development environment",
+    "cde",
+    "dev environment",
+    "workspace",
+    "sandbox",
+    "virtual machine",
+    "vm",
+    "self-hosted",
+    "ai agents"
   ],
   "extensionKind": [
     "ui"

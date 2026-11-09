@@ -202,7 +202,8 @@ tasks:
     desc: What holds the repository's shape - every install through the firewall, and every workflow step a task.
     cmds:
       - go tool sfw check
-      - go tool taskgate
+      # The Task running this one: go.mod's is not on PATH, and taskgate asks it for the task names.
+      - go tool taskgate -task {{.TASK_EXE}}
 
   ci:
     desc: What CI's Gate job runs - the gate, the install, lint, typecheck, the unit tests, and the package. test:integration is its own job.

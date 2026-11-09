@@ -22,6 +22,11 @@ concurrency:
   # A publish half done is finished by running it again, never by a second run cancelling it.
   cancel-in-progress: false
 
+# go-tools' downloads (sfw, versions) ask GitHub with this: anonymous ones are the first it sheds
+# under load. It is each job's token, with only what that job's permissions grant.
+env:
+  GITHUB_TOKEN: ${{ github.token }}
+
 jobs:
   release:
     name: GitHub release

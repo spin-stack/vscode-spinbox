@@ -54,11 +54,12 @@ function openDeps(cli: ProcessSpinCli, enabled: boolean): OpenDeps {
   return {
     cli,
     ui: {
-      progress: (_title, task) => task(new AbortController().signal),
+      progress: (_title, task) => task(new AbortController().signal, () => {}),
       pick: async (ws) => ws[0],
       openFolder: async () => {},
       showCliError: () => {},
       showError: () => {},
+      showWarning: () => {},
     },
     commit: async () => "a".repeat(40),
     vscodeVersion: "1.120.0",

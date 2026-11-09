@@ -2,9 +2,11 @@ import { spawn } from "node:child_process"
 import { createInterface } from "node:readline"
 import { SpinNotFoundError } from "./binary"
 import {
+  type CodePreparing,
   type CodeResult,
   type ErrorCode,
   type ErrorEnvelope,
+  isCodePreparing,
   isErrorEnvelope,
   type LoginDone,
   type LoginStart,
@@ -55,6 +57,8 @@ export interface CodeOptions extends RunOptions {
   vscodeVersion?: string
   // Start the workspace if it is stopped, rather than failing with workspace_stopped.
   start?: boolean
+  // Hears each step of a server the installation prepares for this VS Code, as it begins.
+  onPreparing?: (preparing: CodePreparing["preparing"]) => void
 }
 
 // CliError is a command's failure as the CLI reported it: the envelope it wrote on stdout.
@@ -100,6 +104,9 @@ export const DEFAULT_TIMEOUTS: Timeouts = {
 }
 
 const LOGIN_GRACE_MS = 30_000
+// After a step of a server being prepared, how long code may run on: past the CLI's own wait for
+// the publish (6 minutes) and the host's attach that follows it (3).
+const PREPARING_GRACE_MS = 10 * 60_000
 // Between SIGTERM and SIGKILL, for a CLI that does not stop when asked.
 const KILL_GRACE_MS = 3_000
 // After spin exits, how long its stdout and stderr may stay open: a child it left running that
@@ -177,7 +184,7 @@ export class ProcessSpinCli implements SpinCli {
     return list.items
   }
 
-  code(
+  async code(
     workspace: string,
     path: string | undefined,
     vscodeCommit: string,
@@ -194,7 +201,20 @@ export class ProcessSpinCli implements SpinCli {
     if (opts.start) {
       args.push("--start")
     }
-    return this.one(args, opts, this.timeouts.code)
+    // A server being prepared is minutes the first time any workspace of the installation asks
+    // for this VS Code: each step said moves the deadline, as login's code does.
+    const r = await this.exec(args, opts, this.timeouts.code, (line, extend) => {
+      const p = parse(line)
+      if (isCodePreparing(p)) {
+        extend(PREPARING_GRACE_MS)
+        opts.onPreparing?.(p.preparing)
+      }
+    })
+    const [only, ...rest] = r.lines.map(parse).filter((v) => !isCodePreparing(v))
+    if (r.exit === 0 && isObject(only) && !("error" in only) && rest.length === 0) {
+      return only as unknown as CodeResult
+    }
+    throw failure(r)
   }
 
   run<T>(args: readonly string[], opts: RunOptions = {}): Promise<T> {

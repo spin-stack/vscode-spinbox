@@ -8,8 +8,12 @@ export type OpenCli = Pick<SpinCli, "code" | "listWorkspaces">
 
 // What opening asks of VS Code, so the sequence runs without it.
 export interface OpenUi {
-  // Runs task under a cancelable notification; cancelling it aborts the signal.
-  progress<T>(title: string, task: (signal: AbortSignal) => Promise<T>): Promise<T>
+  // Runs task under a cancelable notification; cancelling it aborts the signal, and report says
+  // what it is doing under the title.
+  progress<T>(
+    title: string,
+    task: (signal: AbortSignal, report: (message: string) => void) => Promise<T>,
+  ): Promise<T>
   // undefined when the person picks none.
   pick(workspaces: Workspace[]): Promise<Workspace | undefined>
   // vscode.openFolder in a new window.
@@ -18,6 +22,8 @@ export interface OpenUi {
   showCliError(error: unknown, retry: () => Promise<void>): void
   // A failure of anything else: the link, or this VS Code.
   showError(message: string): void
+  // What went otherwise than it should and opens anyway: a server VS Code downloads itself.
+  showWarning(message: string): void
 }
 
 export interface OpenDeps {
@@ -58,22 +64,34 @@ async function open(
   }
   // One attempt, which rejects with its failure; cancelling it resolves with nothing opened.
   const attempt = async (traceparent: string | undefined): Promise<void> => {
-    const folderUri = await deps.ui.progress(`Opening ${target.workspace}`, async (signal) => {
-      try {
-        const r = await deps.cli.code(target.workspace, target.path, commit, {
-          start: true,
-          vscodeVersion: deps.vscodeVersion,
-          signal,
-          traceparent,
-        })
-        return r.folder_uri
-      } catch (err) {
-        if (signal.aborted) {
-          return undefined
+    const folderUri = await deps.ui.progress(
+      `Opening ${target.workspace}`,
+      async (signal, report) => {
+        try {
+          const r = await deps.cli.code(target.workspace, target.path, commit, {
+            start: true,
+            vscodeVersion: deps.vscodeVersion,
+            signal,
+            traceparent,
+            onPreparing: (p) =>
+              report(
+                `Preparing VS Code ${p.vscode_version} for this installation (once): ${p.step}`,
+              ),
+          })
+          if (r.not_given !== undefined) {
+            deps.ui.showWarning(
+              `VS Code downloads its own server into ${target.workspace} (about 220 MB): the installation could not prepare it. ${r.not_given}`,
+            )
+          }
+          return r.folder_uri
+        } catch (err) {
+          if (signal.aborted) {
+            return undefined
+          }
+          throw err
         }
-        throw err
-      }
-    })
+      },
+    )
     if (folderUri !== undefined) {
       await deps.ui.openFolder(folderUri)
     }

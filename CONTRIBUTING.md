@@ -29,7 +29,7 @@ CLI speaks only to an installation of its own release; so the extension follows 
 run is named `spin <release>`, which is how shipset finds it again). The run:
 
 1. stops, successfully, when the release is not newer than the pin (`task spin:newer`);
-2. bumps the pin (`task spin:bump`, `go tool versions bump spin <release>`), reading the tag's
+2. bumps the pin (`task spin:bump`, go-tools' `versions bump spin <release>`), reading the tag's
    commit from spin with a read-only token of the release app;
 3. runs `task ci` and `task package:all`, which pulls that release's CLI for every platform it has
    one for and checks each with cosign;
@@ -44,7 +44,7 @@ CI and Package run on it. Merging it, after checking the CLI's contract against
 person's, and it releases the extension: `.github/workflows/tag.yml` tags the merge (below). The
 run needs the app's key as the secret `RELEASE_APP_KEY`.
 
-To bump by hand, `go tool versions bump spin <release>` and `go tool task package:all`.
+To bump by hand, `go tool task spin:bump RELEASE=<release>` and `go tool task package:all`.
 
 ## Releasing
 

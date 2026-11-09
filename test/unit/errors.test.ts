@@ -196,6 +196,13 @@ const CASES: Case[] = [
     did: (retry) => expect(retry).toHaveBeenCalledWith(undefined),
   },
   {
+    // What resolves it is the CLI's message, shown whole.
+    code: "no_vscode_server",
+    text: `${TEXT.no_vscode_server} no_vscode_server msg`,
+    button: BUTTON.details,
+    did: () => expect(output.show).toHaveBeenCalled(),
+  },
+  {
     code: "internal",
     text: `${TEXT.internal} internal msg`,
     button: BUTTON.details,

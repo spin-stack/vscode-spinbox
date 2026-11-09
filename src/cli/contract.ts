@@ -16,6 +16,9 @@ export type ErrorCode =
   | "no_key_held"
   | "no_capacity"
   | "unreachable"
+  // The workspace has no server for this VS Code, could not be given one, and has no room for
+  // the one VS Code would download: opened, Remote-SSH would reconnect without end.
+  | "no_vscode_server"
   | "internal"
 
 export type Action =
@@ -40,6 +43,7 @@ export const ACTION_OF = {
   no_key_held: "add_key",
   no_capacity: "retry",
   unreachable: "retry",
+  no_vscode_server: "details",
   internal: "details",
 } as const satisfies Record<ErrorCode, Action>
 

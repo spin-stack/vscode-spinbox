@@ -113,6 +113,10 @@ async function show(error: unknown, retry: Retry | undefined, updated: boolean):
     case "no_capacity":
     case "unreachable":
       return offer(vscode.window.showErrorMessage, TEXT[e.code], BUTTON.retry, retry, () => again())
+    case "no_vscode_server":
+      // The message is what was refused and what resolves it - an administrator's publish, or
+      // more room - so it is shown whole, with what internal offers beside it.
+      return internal(e, traceId, TEXT.no_vscode_server)
     case "internal":
       return internal(e, traceId)
   }
@@ -131,6 +135,7 @@ export const TEXT = {
   no_key_held: "This machine holds none of your SSH keys. Add one to your account to connect.",
   no_capacity: "No host has room for this workspace right now. Try again in a moment.",
   unreachable: "Spinbox cannot reach the installation. Check your connection and try again.",
+  no_vscode_server: "This workspace has no server for your VS Code, and no room to download one.",
   internal: "Spinbox hit an unexpected error.",
 } as const satisfies Record<ErrorCode, string>
 
@@ -279,9 +284,13 @@ async function details(text: string): Promise<void> {
   }
 }
 
-async function internal(e: ErrorEnvelope["error"], traceId: string | undefined): Promise<void> {
+async function internal(
+  e: ErrorEnvelope["error"],
+  traceId: string | undefined,
+  text: string = TEXT.internal,
+): Promise<void> {
   const choice = await vscode.window.showErrorMessage(
-    withReason(TEXT.internal, e.message),
+    withReason(text, e.message),
     BUTTON.details,
     BUTTON.copy,
   )

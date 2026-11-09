@@ -10,7 +10,8 @@ Needs Go (the tools are pinned in `go.mod`), Node 22 and pnpm.
 ```sh
 go tool task install            # dependencies, through Socket Firewall
 go tool task test               # unit tests (Vitest), against the fake spin in test/fake-spin/
-go tool task test:integration   # the extension activated in a real VS Code; needs a display
+go tool task test:cli           # the reader against the pinned release's real CLI (package:spin)
+go tool task test:integration   # test:cli, then the extension in a real VS Code; needs a display
 go tool task ci                 # what CI runs
 ```
 

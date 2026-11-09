@@ -38,12 +38,19 @@ tasks:
       - pnpm test
       - go test ./hack/...
 
+  test:cli:
+    desc: The extension's reader against the real spin CLI of the pinned release (test/cli/), pulled and checked by package:spin - minutes, so it is not in task test.
+    cmds:
+      - task: package:spin
+      - pnpm test:cli
+
   test:integration:
-    desc: Activate the extension in a real VS Code, downloaded into .vscode-test/. Under xvfb-run when it is installed, which CI's runner has; otherwise on the display there is.
+    desc: test:cli, then the extension activated in a real VS Code, downloaded into .vscode-test/. Under xvfb-run when it is installed, which CI's runner has; otherwise on the display there is.
     vars:
       XVFB:
         sh: command -v xvfb-run || true
     cmds:
+      - task: test:cli
       - task: build
       - '{{if .XVFB}}xvfb-run -a {{end}}pnpm test:integration'
 

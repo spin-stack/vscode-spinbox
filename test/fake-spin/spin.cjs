@@ -13,8 +13,9 @@
 //   FAKE_SPIN_LOGIN_DELAY_MS    how long login waits between its two lines (default 0)
 //   FAKE_SPIN_LOG=<file>        every invocation's arguments appended as one JSON line
 //
-// code answers in JSON Lines: {"preparing": {...}} lines for a server being prepared, then its
-// result, which a scenario writes as its stdout in that order.
+// Each document is written as the real CLI writes it: indented over many lines, but login's and
+// code's {"preparing": {...}} steps one to a line (JSON Lines). code writes its steps for a
+// server being prepared, then its result, which a scenario writes as its stdout in that order.
 //
 // With neither, each command answers the contract's example. Without -o json it refuses, exit 2:
 // the extension never runs a command without it.
@@ -198,6 +199,15 @@ function answer(command) {
   return a ?? DEFAULTS[command] ?? DEFAULTS["*"]
 }
 
+// A document as the real CLI writes it (spin's cmd/cli/cmd/output.go): indented over many lines
+// (emit), but login's two documents and code's preparing steps each on one line (emitLine).
+function encode(command, doc) {
+  const line =
+    command === "login" ||
+    (command === "code" && typeof doc === "object" && doc !== null && "preparing" in doc)
+  return line ? JSON.stringify(doc) : JSON.stringify(doc, null, 2)
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 async function main() {
@@ -223,7 +233,7 @@ async function main() {
     if (i > 0) {
       await sleep(a.lineDelayMs ?? 0)
     }
-    process.stdout.write(`${JSON.stringify(line)}\n`)
+    process.stdout.write(`${encode(command, line)}\n`)
   }
   return a.exit ?? 0
 }

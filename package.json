@@ -210,6 +210,7 @@
     "lint:fix": "biome check --write .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:cli": "vitest run --config vitest.cli.config.mts",
     "test:integration": "node esbuild.mjs --tests && node test/integration/run.mjs",
     "package": "vsce package --no-dependencies --out spinbox.vsix"
   },

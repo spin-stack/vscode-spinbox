@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process"
-import { createInterface } from "node:readline"
 import { SpinNotFoundError } from "./binary"
 import {
   type CodePreparing,
@@ -14,6 +13,7 @@ import {
   type Workspace,
   type WorkspaceList,
 } from "./contract"
+import { JsonDocuments } from "./documents"
 
 // SpinCli is everything the extension asks of spin: each method runs one command with -o json
 // and resolves with its answer, or rejects with a CliError carrying the envelope the CLI wrote.
@@ -129,7 +129,8 @@ export interface ProcessSpinCliOptions {
 interface Exited {
   args: readonly string[]
   traceparent: string | undefined
-  lines: string[]
+  // The JSON documents spin wrote on stdout, parsed; undefined for what was not one.
+  docs: unknown[]
   exit: number | null
   stderr: string
 }
@@ -157,14 +158,13 @@ export class ProcessSpinCli implements SpinCli {
     if (opts.endpoint !== undefined) {
       args.push("--endpoint", opts.endpoint)
     }
-    const r = await this.exec(args, opts, this.timeouts.login, (line, extend) => {
-      const start = parse(line)
+    const r = await this.exec(args, opts, this.timeouts.login, (start, extend) => {
       if (isLoginStart(start)) {
         extend(start.expires_in * 1000 + LOGIN_GRACE_MS)
         onStart(start)
       }
     })
-    const [first, second, ...rest] = r.lines.map(parse)
+    const [first, second, ...rest] = r.docs
     if (r.exit === 0 && isLoginStart(first) && isObject(second) && rest.length === 0) {
       return second as unknown as LoginDone
     }
@@ -203,14 +203,13 @@ export class ProcessSpinCli implements SpinCli {
     }
     // A server being prepared is minutes the first time any workspace of the installation asks
     // for this VS Code: each step said moves the deadline, as login's code does.
-    const r = await this.exec(args, opts, this.timeouts.code, (line, extend) => {
-      const p = parse(line)
+    const r = await this.exec(args, opts, this.timeouts.code, (p, extend) => {
       if (isCodePreparing(p)) {
         extend(PREPARING_GRACE_MS)
         opts.onPreparing?.(p.preparing)
       }
     })
-    const [only, ...rest] = r.lines.map(parse).filter((v) => !isCodePreparing(v))
+    const [only, ...rest] = r.docs.filter((v) => !isCodePreparing(v))
     if (r.exit === 0 && isObject(only) && !("error" in only) && rest.length === 0) {
       return only as unknown as CodeResult
     }
@@ -224,7 +223,7 @@ export class ProcessSpinCli implements SpinCli {
   // A command that answers one JSON object.
   private async one<T>(args: readonly string[], opts: RunOptions, timeoutMs: number): Promise<T> {
     const r = await this.exec(args, opts, timeoutMs)
-    const [only, ...rest] = r.lines.map(parse)
+    const [only, ...rest] = r.docs
     if (r.exit === 0 && isObject(only) && !("error" in only) && rest.length === 0) {
       return only as T
     }
@@ -233,13 +232,13 @@ export class ProcessSpinCli implements SpinCli {
 
   // Runs spin with args, -o json and the traceparent, until it exits. It rejects with the
   // signal's reason when the signal aborts, and with an internal CliError when it outlasts
-  // timeoutMs; either way the process is killed first. onLine sees each stdout line as it
-  // arrives, and may move the deadline to ms from then.
+  // timeoutMs; either way the process is killed first. onDoc sees each JSON document of stdout,
+  // parsed, as soon as it is whole, and may move the deadline to ms from then.
   private async exec(
     args: readonly string[],
     opts: RunOptions,
     timeoutMs: number,
-    onLine?: (line: string, extend: (ms: number) => void) => void,
+    onDoc?: (doc: unknown, extend: (ms: number) => void) => void,
   ): Promise<Exited> {
     const { signal, traceparent } = this.traced(opts)
     signal?.throwIfAborted()
@@ -253,7 +252,8 @@ export class ProcessSpinCli implements SpinCli {
 
     return new Promise<Exited>((resolve, reject) => {
       const child = spawn(binary, argv, { stdio: ["ignore", "pipe", "pipe"] })
-      const lines: string[] = []
+      const docs: unknown[] = []
+      const reader = new JsonDocuments()
       const stderr: Buffer[] = []
       let killedFor: unknown
       let settled = false
@@ -306,19 +306,20 @@ export class ProcessSpinCli implements SpinCli {
         signal?.removeEventListener("abort", onAbort)
       }
 
-      createInterface({ input: child.stdout }).on("line", (line) => {
-        if (line.trim() === "") {
-          return
-        }
-        lines.push(line)
-        if (onLine && killedFor === undefined) {
-          try {
-            onLine(line, extend)
-          } catch (err) {
-            kill(err)
+      const take = (found: unknown[]) => {
+        for (const doc of found) {
+          docs.push(doc)
+          if (onDoc && killedFor === undefined) {
+            try {
+              onDoc(doc, extend)
+            } catch (err) {
+              kill(err)
+            }
           }
         }
-      })
+      }
+      child.stdout.setEncoding("utf8")
+      child.stdout.on("data", (chunk: string) => take(reader.push(chunk)))
       child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk))
 
       child.on("error", (err: NodeJS.ErrnoException) => {
@@ -353,7 +354,8 @@ export class ProcessSpinCli implements SpinCli {
           reject(killedFor)
           return
         }
-        resolve({ args, traceparent, lines, exit, stderr: text })
+        docs.push(...reader.end())
+        resolve({ args, traceparent, docs, exit, stderr: text })
       })
     })
   }
@@ -367,14 +369,13 @@ export class ProcessSpinCli implements SpinCli {
 // The CliError a command that did not succeed fails with: the envelope it wrote, or, for anything
 // else the contract does not allow, internal with what there is to say about it.
 function failure(r: Exited): CliError {
-  const parsed = r.lines.map(parse)
-  const env = parsed.find(isErrorEnvelope)
+  const env = r.docs.find(isErrorEnvelope)
   if (env) {
     return new CliError(env, r.exit ?? -1, r.traceparent)
   }
   const shown = `spin ${r.args.join(" ")}`
   // An envelope whose code this extension does not know keeps its message, never its action.
-  const message = parsed
+  const message = r.docs
     .map((v) => (isObject(v) && isObject(v.error) ? v.error.message : undefined))
     .find((m): m is string => typeof m === "string")
   if (message !== undefined) {
@@ -395,14 +396,6 @@ function internal(message: string, exitCode: number, traceparent: string | undef
     exitCode,
     traceparent,
   )
-}
-
-function parse(line: string): unknown {
-  try {
-    return JSON.parse(line)
-  } catch {
-    return undefined
-  }
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {

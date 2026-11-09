@@ -9,8 +9,8 @@ describe("error envelopes", () => {
   it.each(ERROR_CODES)("%s fails with exit 1, one envelope, and the table's action", (code) => {
     const r = runFake(["workspace", "list", "-o", "json"], { FAKE_SPIN_ERROR: code })
     expect(r.exit).toBe(1)
-    expect(r.lines).toHaveLength(1)
-    const [env] = r.lines
+    expect(r.docs).toHaveLength(1)
+    const [env] = r.docs
     expect(isErrorEnvelope(env)).toBe(true)
     expect(env).toMatchObject({ error: { code, action: ACTION_OF[code] } })
   })
@@ -32,20 +32,29 @@ describe("error envelopes", () => {
 
 describe("fake spin", () => {
   it("answers each command with the contract's shape", () => {
-    expect(runFake(["version", "-o", "json"]).lines).toEqual([
+    expect(runFake(["version", "-o", "json"]).docs).toEqual([
       expect.objectContaining({ cli: expect.any(String), signed_in: true }),
     ])
-    expect(runFake(["login", "--no-browser", "-o", "json"]).lines).toEqual([
+    expect(runFake(["login", "--no-browser", "-o", "json"]).docs).toEqual([
       expect.objectContaining({ user_code: "ABCD-EFGH", expires_in: 600 }),
       expect.objectContaining({ profile: "default", user: expect.any(Object) }),
     ])
-    expect(runFake(["workspace", "list", "-o", "json"]).lines).toEqual([
+    expect(runFake(["workspace", "list", "-o", "json"]).docs).toEqual([
       { items: [expect.objectContaining({ id: "ws-1", state: "WORKSPACE_STATE_RUNNING" })] },
     ])
     expect(
-      runFake(["code", "my-ws", "--no-open", "--vscode-commit", "a".repeat(40), "-o", "json"])
-        .lines,
+      runFake(["code", "my-ws", "--no-open", "--vscode-commit", "a".repeat(40), "-o", "json"]).docs,
     ).toEqual([expect.objectContaining({ host: "spin.my-ws", server: "carried" })])
+  })
+
+  // What spin's cmd/cli/cmd/output.go does: emit indents, emitLine (login) writes JSON Lines.
+  it("writes documents the way the real CLI does", () => {
+    expect(runFake(["version", "-o", "json"]).stdout).toMatch(/^\{\n {2}"cli": /)
+    expect(runFake(["login", "--no-browser", "-o", "json"]).stdout.split("\n")).toEqual([
+      expect.stringMatching(/^\{"verification_url":.*\}$/),
+      expect.stringMatching(/^\{"profile":.*\}$/),
+      "",
+    ])
   })
 
   it("answers a scenario file per command, the rest by default", () => {
@@ -60,7 +69,7 @@ describe("fake spin", () => {
     const env = { FAKE_SPIN_SCENARIO: scenario }
     const r = runFake(["code", "my-ws", "-o", "json"], env)
     expect(r.exit).toBe(1)
-    expect(r.lines).toEqual([
+    expect(r.docs).toEqual([
       {
         error: {
           code: "access_needs_signature",

@@ -11,10 +11,10 @@ const ui: OpenUi = {
     Promise.resolve(
       vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title, cancellable: true },
-        (_progress, token) => {
+        (progress, token) => {
           const abort = new AbortController()
           token.onCancellationRequested(() => abort.abort())
-          return task(abort.signal)
+          return task(abort.signal, (message) => progress.report({ message }))
         },
       ),
     ),
@@ -39,6 +39,9 @@ const ui: OpenUi = {
   },
   showError: (message) => {
     void vscode.window.showErrorMessage(message)
+  },
+  showWarning: (message) => {
+    void vscode.window.showWarningMessage(message)
   },
 }
 

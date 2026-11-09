@@ -7,10 +7,14 @@
 //   FAKE_SPIN_ERROR=<code>      every command fails with that code's envelope, exit 1
 //   FAKE_SPIN_SCENARIO=<file>   a JSON object keyed by command ("version", "workspace list", ...,
 //                               "*" for any): {"stdout": [<object>, ...], "stderr": "<text>",
-//                               "exit": <n>, "delayMs": <n>} or {"error": "<code>", "message",
+//                               "exit": <n>, "delayMs": <n>, "lineDelayMs": <n between lines>}
+//                               or {"error": "<code>", "message",
 //                               "action", "release", "workspace_id", "url", "delayMs"}. A command it does not name gets the default answer.
 //   FAKE_SPIN_LOGIN_DELAY_MS    how long login waits between its two lines (default 0)
 //   FAKE_SPIN_LOG=<file>        every invocation's arguments appended as one JSON line
+//
+// code answers in JSON Lines: {"preparing": {...}} lines for a server being prepared, then its
+// result, which a scenario writes as its stdout in that order.
 //
 // With neither, each command answers the contract's example. Without -o json it refuses, exit 2:
 // the extension never runs a command without it.
@@ -215,6 +219,9 @@ async function main() {
   for (const [i, line] of lines.entries()) {
     if (command === "login" && i > 0) {
       await sleep(Number(process.env.FAKE_SPIN_LOGIN_DELAY_MS ?? 0))
+    }
+    if (i > 0) {
+      await sleep(a.lineDelayMs ?? 0)
     }
     process.stdout.write(`${JSON.stringify(line)}\n`)
   }

@@ -98,14 +98,35 @@ export interface LoginDone {
 
 export type ServerSource = "carried" | "downloaded" | "missing"
 
-// `spin code <workspace> [path] --no-open --vscode-commit <sha> -o json`: the SSH config is
-// written and nothing is opened.
+// `spin code <workspace> [path] --no-open --vscode-commit <sha> -o json` answers in JSON Lines: a
+// CodePreparing line for each step of a server the installation prepares for this VS Code - once
+// for the whole installation - and then the CodeResult: the SSH config is written and nothing is
+// opened.
+export interface CodePreparing {
+  preparing: {
+    vscode_version: string
+    vscode_commit: string
+    step: string
+  }
+}
+
 export interface CodeResult {
   workspace_id: string
   host: string
   // vscode-remote://ssh-remote+<host><path>
   folder_uri: string
   server: ServerSource
+  // Why the installation did not give the workspace this VS Code's server - its terms not
+  // accepted, a publish that failed - where VS Code then downloads its own into the workspace.
+  not_given?: string
+}
+
+export function isCodePreparing(v: unknown): v is CodePreparing {
+  if (typeof v !== "object" || v === null || !("preparing" in v)) {
+    return false
+  }
+  const p = (v as { preparing: unknown }).preparing
+  return typeof p === "object" && p !== null && typeof (p as { step?: unknown }).step === "string"
 }
 
 // `spin workspace list -o json` keeps the shape it has: {"items": [...]}, each item a

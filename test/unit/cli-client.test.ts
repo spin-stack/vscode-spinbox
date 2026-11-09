@@ -239,6 +239,36 @@ describe("ProcessSpinCli kills a hung spin", () => {
     expect(Date.now() - started).toBeLessThan(5_000)
   })
 
+  // A server being prepared takes minutes once; each step it says moves code's deadline, and is
+  // heard as it comes. The steps are not the answer: the result after them is.
+  it("not while a server is being prepared and says so", async () => {
+    const step = (s: string) => ({
+      preparing: { vscode_version: "1.120.0", vscode_commit: "a".repeat(40), step: s },
+    })
+    scenario({
+      code: {
+        lineDelayMs: 1000,
+        stdout: [
+          step("downloading"),
+          step("building"),
+          {
+            workspace_id: "ws-1",
+            host: "spin.my-ws",
+            folder_uri: "vscode-remote://x",
+            server: "carried",
+          },
+        ],
+      },
+    })
+    const heard: string[] = []
+    await expect(
+      cli({ code: 1500 }).cli.code("my-ws", undefined, "a".repeat(40), {
+        onPreparing: (p) => heard.push(p.step),
+      }),
+    ).resolves.toMatchObject({ server: "carried" })
+    expect(heard).toEqual(["downloading", "building"])
+  }, 10_000)
+
   it("not while login waits within the code's lifetime", async () => {
     vi.stubEnv("FAKE_SPIN_LOGIN_DELAY_MS", "3000")
     await expect(cli({ login: 1500 }).cli.login(() => {})).resolves.toMatchObject({

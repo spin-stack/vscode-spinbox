@@ -18,6 +18,8 @@ interface Seen {
   opened: string[]
   cliErrors: { error: unknown; retry: () => Promise<void> }[]
   errors: string[]
+  warnings: string[]
+  reported: string[]
   picked: Workspace[][]
   invocations(): string[][]
 }
@@ -35,6 +37,8 @@ function setup(
     opened: [],
     cliErrors: [],
     errors: [],
+    warnings: [],
+    reported: [],
     picked: [],
     invocations: () =>
       readFileSync(log, "utf8")
@@ -50,7 +54,7 @@ function setup(
     ui: {
       progress: (_title, task) => {
         const abort = new AbortController()
-        const p = task(abort.signal)
+        const p = task(abort.signal, (message) => seen.reported.push(message))
         if (opts.cancel === true) {
           setTimeout(() => abort.abort(), 50)
         }
@@ -68,6 +72,9 @@ function setup(
       },
       showError: (message) => {
         seen.errors.push(message)
+      },
+      showWarning: (message) => {
+        seen.warnings.push(message)
       },
     },
     commit: async () => COMMIT,
@@ -104,6 +111,63 @@ describe("openWorkspace", () => {
     ])
     expect(seen.opened).toEqual(["vscode-remote://ssh-remote+spin.my-ws/root"])
     expect(seen.cliErrors).toEqual([])
+  })
+
+  // The first workspace of the installation to ask for this VS Code waits while the installation
+  // prepares its server, and the notification says each step.
+  it("says each step of a server being prepared, then opens the folder", async () => {
+    const step = (s: string) => ({
+      preparing: { vscode_version: "1.120.0", vscode_commit: COMMIT, step: s },
+    })
+    const { deps, seen } = setup({
+      FAKE_SPIN_SCENARIO: scenario({
+        code: {
+          stdout: [
+            step("downloading"),
+            step("building"),
+            {
+              workspace_id: "ws-1",
+              host: "spin.my-ws",
+              folder_uri: "vscode-remote://ssh-remote+spin.my-ws/root",
+              server: "carried",
+            },
+          ],
+        },
+      }),
+    })
+    await openWorkspace(deps, { workspace: "ws-1" })
+    expect(seen.reported).toEqual([
+      "Preparing VS Code 1.120.0 for this installation (once): downloading",
+      "Preparing VS Code 1.120.0 for this installation (once): building",
+    ])
+    expect(seen.opened).toEqual(["vscode-remote://ssh-remote+spin.my-ws/root"])
+    expect(seen.warnings).toEqual([])
+  })
+
+  // A server the installation would not prepare is said, beside the folder opening anyway: VS
+  // Code downloads its own into the workspace.
+  it("says why the installation gave no server, and opens the folder anyway", async () => {
+    const why =
+      "this installation downloads no VS Code server: an administrator accepts them in Admin → Extensions"
+    const { deps, seen } = setup({
+      FAKE_SPIN_SCENARIO: scenario({
+        code: {
+          stdout: [
+            {
+              workspace_id: "ws-1",
+              host: "spin.my-ws",
+              folder_uri: "vscode-remote://ssh-remote+spin.my-ws/root",
+              server: "missing",
+              not_given: why,
+            },
+          ],
+        },
+      }),
+    })
+    await openWorkspace(deps, { workspace: "ws-1" })
+    expect(seen.warnings).toHaveLength(1)
+    expect(seen.warnings[0]).toContain(why)
+    expect(seen.opened).toEqual(["vscode-remote://ssh-remote+spin.my-ws/root"])
   })
 
   it("hands a failure to the errors module with a retry that runs it again, and opens nothing", async () => {

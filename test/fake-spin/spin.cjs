@@ -28,6 +28,7 @@ const ACTION_OF = {
   no_key_held: "add_key",
   no_capacity: "retry",
   unreachable: "retry",
+  no_vscode_server: "details",
   internal: "details",
 }
 

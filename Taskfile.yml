@@ -192,11 +192,16 @@ tasks:
       - versions bump spin "{{.RELEASE}}"
 
   spin:propose:
-    desc: Commit versions.yaml's spin at RELEASE, push it to spin/next and open or rewrite the pull request there, as the app GH_TOKEN and APP_SLUG name (hack/spinpropose) - the Bump spin workflow's last step, after task ci and task package:all.
+    desc: Commit versions.yaml's spin at RELEASE, with package.json at the next patch when its version is tagged already, push it to spin/next and open or rewrite the pull request there, as the app GH_TOKEN and APP_SLUG name (hack/spinpropose) - the Bump spin workflow's last step, after task ci and task package:all.
     requires:
       vars: [RELEASE, APP_SLUG]
     cmds:
       - go run ./hack/spinpropose -release "{{.RELEASE}}" -app "{{.APP_SLUG}}"
+
+  release:tag:
+    desc: Tag the commit GITHUB_SHA names with the tag package.json's version is released as - v and the version, with -pre after it for an odd minor - as the app whose token GH_TOKEN is, when no tag has that version yet (hack/releasetag); the Tag workflow's one step, after a push to main. A tag the app makes starts Publish; one made with a workflow's own token would not.
+    cmds:
+      - go run ./hack/releasetag
 
   gate:
     desc: What holds the repository's shape - every install through the firewall, and every workflow step a task.

@@ -1,6 +1,6 @@
-# What the extension pins from outside it, but its npm packages (pnpm-lock.yaml), the Go tools
+# What the extension pins from outside it, but its npm packages (pnpm-lock.yaml), go-tools' cmd/task
 # (go.mod) and the actions the workflows run (Dependabot's). It is go-tools' versions format:
-# `go tool versions version <name>` reads an entry, `go tool versions check` says what is behind.
+# `versions version <name>` reads an entry from a task, `versions check` says what is behind.
 
 - name: spin
   kind: git
@@ -26,3 +26,17 @@
     checksum database holds it to its bytes and no runner needs it installed. spin-machine pins
     it too: keep the two at one version. A bump is checked with task package:all, and with a
     binary altered by a byte, which it must refuse.
+
+- name: task
+  kind: download
+  source: https://github.com/go-task/task/releases/download/v{version}/task_{os}_{arch}.tar.gz
+  version: 3.54.0
+  pins:
+    linux/amd64: 680859dbb4d881a9c72d4d9a8f510825450849af8567deacd7302c01124416fb
+    linux/arm64: d7189d439d4a6058e39e1b2acd7c8b27acd4856691b408f23b242e4294e1df5b
+    darwin/amd64: 0543b0844a725814c0412d3f4bed12873ce9ed0da207b15775f63a97d734aac0
+    darwin/arm64: 12a69fcf37bb8d5bc9150c44f9a936775b73e59ff044c2c245232f198c135637
+  track: github-release https://github.com/go-task/task
+  note: >-
+    The Task `go tool task` runs (go-tools' cmd/task), for every platform a person or a runner
+    works on: no repository compiles it.

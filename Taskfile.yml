@@ -1,8 +1,8 @@
 version: '3'
 
 # The VS Code extension spin-stack.spinbox: TypeScript in src/, bundled by esbuild into dist/,
-# packaged by vsce. Every install goes through Socket Firewall (go tool sfw), and every workflow
-# step is one of these tasks (go tool taskgate), so a developer runs what CI runs.
+# packaged by vsce. Every install goes through Socket Firewall (sfw), and every workflow
+# step is one of these tasks (taskgate), so a developer runs what CI runs.
 
 vars:
   # The release a publish is for: the tag a workflow runs on, or TAG=v1.2.3 on the command line.
@@ -13,9 +13,9 @@ vars:
 
 tasks:
   install:
-    desc: Install the dependencies from the lockfile, through Socket Firewall (go tool sfw).
+    desc: Install the dependencies from the lockfile, through Socket Firewall (sfw).
     cmds:
-      - go tool sfw pnpm install --frozen-lockfile
+      - sfw pnpm install --frozen-lockfile
 
   build:
     desc: Bundle the extension into dist/extension.js.
@@ -64,9 +64,9 @@ tasks:
     desc: Pull the spin CLI versions.yaml pins for every platform its release has, into build/spin/<target>/spin with its VERSION, each checked with cosign against what spin's release workflow signed and attested of that release (hack/spinbin). A platform the release lacks is skipped, and said.
     vars:
       SPIN:
-        sh: go tool versions version spin
+        sh: versions version spin
       COSIGN:
-        sh: echo "go run github.com/sigstore/cosign/v3/cmd/cosign@$(go tool versions version cosign)"
+        sh: echo "go run github.com/sigstore/cosign/v3/cmd/cosign@$(versions version cosign)"
     cmds:
       - rm -rf build/spin
       - go run ./hack/spinbin -version {{.SPIN}} -out build/spin -cosign '{{.COSIGN}}'
@@ -106,7 +106,7 @@ tasks:
       again, over the ones it had: a run is run again whole. Needs GH_TOKEN and the job's OIDC token.
     vars:
       COSIGN:
-        sh: echo "go run github.com/sigstore/cosign/v3/cmd/cosign@$(go tool versions version cosign)"
+        sh: echo "go run github.com/sigstore/cosign/v3/cmd/cosign@$(versions version cosign)"
       OUT: build/release
       NOTES: build/release-notes.md
       # Who signs: this workflow at the tag, as spin's internal/vsix demands it.
@@ -174,22 +174,22 @@ tasks:
       - pnpm exec ovsx publish --skip-duplicate {{.PRE_RELEASE}} --packagePath *.vsix
 
   spin:newer:
-    desc: Whether GIVEN, a spin release, is newer than versions.yaml's spin, as release=<it or nothing> - the Bump spin workflow's first step (go tool versions newer).
+    desc: Whether GIVEN, a spin release, is newer than versions.yaml's spin, as release=<it or nothing> - the Bump spin workflow's first step (versions newer).
     cmds:
       - |
         set -euo pipefail
-        newer=$(go tool versions newer spin "${GIVEN}")
+        newer=$(versions newer spin "${GIVEN}")
         echo "release=${newer}" >> "${GITHUB_OUTPUT:-/dev/stdout}"
 
   spin:bump:
-    desc: Pin versions.yaml's spin at RELEASE (go tool versions bump), which asks spin's repository for the tag's commit over git - with GH_TOKEN as git's credentials when it is set, since spin is private.
+    desc: Pin versions.yaml's spin at RELEASE (versions bump), which asks spin's repository for the tag's commit over git - with GH_TOKEN as git's credentials when it is set, since spin is private.
     requires:
       vars: [RELEASE]
     cmds:
       # In the workflow, the only credentials git has are the app's read token; a developer's own
       # git already reaches spin.
       - '[ -z "${GH_TOKEN:-}" ] || gh auth setup-git'
-      - go tool versions bump spin "{{.RELEASE}}"
+      - versions bump spin "{{.RELEASE}}"
 
   spin:propose:
     desc: Commit versions.yaml's spin at RELEASE, push it to spin/next and open or rewrite the pull request there, as the app GH_TOKEN and APP_SLUG name (hack/spinpropose) - the Bump spin workflow's last step, after task ci and task package:all.
@@ -201,9 +201,9 @@ tasks:
   gate:
     desc: What holds the repository's shape - every install through the firewall, and every workflow step a task.
     cmds:
-      - go tool sfw check
-      # The Task running this one: go.mod's is not on PATH, and taskgate asks it for the task names.
-      - go tool taskgate -task {{.TASK_EXE}}
+      - sfw check
+      # The Task running this one, which taskgate asks for the task names.
+      - taskgate -task {{.TASK_EXE}}
 
   ci:
     desc: What CI's Gate job runs - the gate, the install, lint, typecheck, the unit tests, and the package. test:integration is its own job.

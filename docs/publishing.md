@@ -94,8 +94,10 @@ You need the GitHub account you will log in to open-vsx.org with.
    - The Marketplace takes only `major.minor.patch`.
    - A pre-release and a release can never share a version.
    - Its convention is an **odd minor for pre-releases** and an even minor for releases.
-   - So the first one is `0.1.0` as a pre-release. Set `"version": "0.1.0"` in `package.json`,
-     merge it, then tag `main`:
+   - No tag is pushed by hand: merging a `package.json` whose version no tag has yet runs
+     `.github/workflows/tag.yml`, which tags that commit, with `-pre` for an odd minor.
+   - So the first one is `0.1.0` as a pre-release. Set `"version": "0.1.0"` in `package.json`
+     and merge it; the tag it gets is the one you would push by hand:
 
    ```sh
    git tag v0.1.0-pre && git push origin v0.1.0-pre

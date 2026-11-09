@@ -4,8 +4,9 @@ name: Bump spin
 # ci, and task package:all, which pulls that release's CLI for every platform and holds each to
 # what spin's release workflow signed with cosign - and a pull request on spin/next. One branch,
 # rewritten by each run, so what waits there is always the newest release: a CLI speaks to an
-# installation of its own release alone, and the extension follows each one. A person reads it,
-# merges it, and tags the extension.
+# installation of its own release alone, and the extension follows each one. The pull request moves
+# package.json to the next patch too, so a person reads it and merges it, and tag.yml tags the
+# merge, which publishes.
 #
 # spin-stack/shipset dispatches this with each spin release newer than the pin, and finds the run
 # again by its name. As the release app (spin-stack-release), as shipset's other hops propose: a

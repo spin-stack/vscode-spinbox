@@ -33,14 +33,16 @@ run is named `spin <release>`, which is how shipset finds it again). The run:
    commit from spin with a read-only token of the release app;
 3. runs `task ci` and `task package:all`, which pulls that release's CLI for every platform it has
    one for and checks each with cosign;
-4. commits as the release app (spin-stack-release), force-pushes `spin/next`, and opens the pull
+4. moves `package.json`'s version to the next patch when a tag has it already, commits that and
+   the pin as the release app (spin-stack-release), force-pushes `spin/next`, and opens the pull
    request there, or rewrites the one open (`task spin:propose`, `hack/spinpropose`).
 
 One branch, rewritten by each run: what waits there is always the newest release, and a newer one
 replaces commits added to it. The pull request is opened by the app, not by the run's own token, so
 CI and Package run on it. Merging it, after checking the CLI's contract against
-`src/cli/contract.ts` and trying the extension against an installation of that release, and then
-tagging the extension, are a person's. The run needs the app's key as the secret `RELEASE_APP_KEY`.
+`src/cli/contract.ts` and trying the extension against an installation of that release, is a
+person's, and it releases the extension: `.github/workflows/tag.yml` tags the merge (below). The
+run needs the app's key as the secret `RELEASE_APP_KEY`.
 
 To bump by hand, `go tool versions bump spin <release>` and `go tool task package:all`.
 
@@ -51,6 +53,12 @@ platform once (`task package:all`), makes the tag's GitHub release (`task publis
 pushes the same files to the public package `ghcr.io/spin-stack/vscode-spinbox-release`
 (`task publish:ghcr`), and then publishes the same VSIXs to the Visual Studio Marketplace
 (`vsce`) and to Open VSX (`ovsx`). The tag is `v` followed by `package.json`'s `version`.
+
+Nobody pushes that tag for a release. A push to main that changes `package.json` runs
+`.github/workflows/tag.yml` (`task release:tag`): when no tag has the version it holds, it tags
+that commit `v<version>`, or `v<version>-pre` for an odd minor (the Marketplace's convention for a
+pre-release), as the release app, since a tag pushed with the run's own token would start no
+workflow. So merging a bump releases it, and so does merging a version set by hand. The tag workflow needs `RELEASE_APP_KEY` too.
 
 The GitHub release comes first, in a job of its own, so it exists whether or not a registry is set
 up or answers. It holds:

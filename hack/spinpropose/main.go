@@ -8,6 +8,10 @@
 // As the app so CI and Package run on the pull request, which one opened with a workflow's own
 // token would not start, and so spin-stack/shipset, which waits only on what the app proposed,
 // sees it. One branch, rewritten by each run: what waits there is always the newest release.
+//
+// package.json's version moves to the next patch when the one main holds is already tagged, so
+// merging the pull request is a release: .github/workflows/tag.yml tags main at the version no tag
+// has yet, and that tag publishes.
 package main
 
 import (
@@ -19,6 +23,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/spin-stack/vscode-spinbox/hack/release"
 )
 
 const branch = "spin/next"
@@ -28,6 +34,7 @@ func main() {
 	flag.StringVar(&p.release, "release", "", "the spin release versions.yaml was bumped to")
 	flag.StringVar(&p.app, "app", "", "the app's slug, whose token GH_TOKEN is")
 	flag.StringVar(&p.spin, "spin", "build/spin", "package:spin's output: a directory per platform with a CLI")
+	flag.StringVar(&p.pkg, "package", "package.json", "the extension's manifest, whose version a release is")
 	flag.Parse()
 	p.run = os.Getenv("GITHUB_SERVER_URL") + "/" + os.Getenv("GITHUB_REPOSITORY") + "/actions/runs/" + os.Getenv("GITHUB_RUN_ID")
 	p.sh = shell
@@ -40,10 +47,10 @@ func main() {
 }
 
 // proposal is one release's pull request: the release, the app, the run that checked it, where
-// package:spin put the CLIs, and the commands it runs - a test gives its own.
+// package:spin put the CLIs, the manifest, and the commands it runs - a test gives its own.
 type proposal struct {
-	release, app, run, spin string
-	sh                      func(name string, args ...string) (string, error)
+	release, app, run, spin, pkg string
+	sh                           func(name string, args ...string) (string, error)
 }
 
 // shell is a command's standard output, trimmed; what it said on standard error is in the error.
@@ -91,12 +98,16 @@ func (p proposal) open() (string, error) {
 	if err := json.Unmarshal([]byte(out), &user); err != nil || user.ID == 0 {
 		return "", fmt.Errorf("gh api /users/%s[bot]: no id in %q", p.app, out)
 	}
+	version, err := p.version()
+	if err != nil {
+		return "", err
+	}
 	title := "versions: spin " + p.release
 	for _, args := range [][]string{
 		{"config", "user.name", p.app + "[bot]"},
 		{"config", "user.email", fmt.Sprintf("%d+%s[bot]@users.noreply.github.com", user.ID, p.app)},
 		{"checkout", "-q", "-B", branch},
-		{"commit", "-q", "-m", title, "-m", "The release whose CLI every VSIX carries, checked by " + p.run + ".", "versions.yaml"},
+		{"commit", "-q", "-m", title, "-m", "The release whose CLI every VSIX carries, checked by " + p.run + ".", "versions.yaml", p.pkg},
 		{"push", "-q", "--force", "origin", branch},
 	} {
 		if _, err := p.sh("git", args...); err != nil {
@@ -116,7 +127,11 @@ func (p proposal) open() (string, error) {
 	if err := json.Unmarshal([]byte(out), &prs); err != nil {
 		return "", fmt.Errorf("gh pr list: %w", err)
 	}
-	b := body(p.release, p.run, targets)
+	tag, err := release.Tag(version)
+	if err != nil {
+		return "", err
+	}
+	b := body(p.release, p.run, version, tag, targets)
 	if len(prs) == 0 {
 		return p.sh("gh", "pr", "create", "--head", branch, "--base", "main", "--title", title, "--body", b)
 	}
@@ -127,8 +142,30 @@ func (p proposal) open() (string, error) {
 	return prs[0].URL, nil
 }
 
+// version is the extension's version the pull request releases: package.json's when no tag has
+// it yet, as when a person set one by hand, or else the patch after it, written to package.json.
+func (p proposal) version() (string, error) {
+	m, err := release.Read(p.pkg)
+	if err != nil {
+		return "", err
+	}
+	tag, err := release.Tag(m.Version())
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", p.pkg, err)
+	}
+	tagged, err := p.sh("git", "ls-remote", "--tags", "origin", "refs/tags/"+tag)
+	if err != nil || tagged == "" {
+		return m.Version(), err
+	}
+	next, err := release.NextPatch(m.Version())
+	if err != nil {
+		return "", err
+	}
+	return next, m.SetVersion(next)
+}
+
 // body is the pull request's: the release, what the run checked, and what is left to a person.
-func body(release, run string, targets []string) string {
+func body(release, run, version, tag string, targets []string) string {
 	return "Moves versions.yaml's spin to [spin " + release + "](https://github.com/spin-stack/spin/releases/tag/" + release + "): " +
 		"the release whose CLI every VSIX carries, which speaks only to an installation of that same release.\n\n" +
 		"Checked by [the run that proposed it](" + run + "):\n\n" +
@@ -137,7 +174,9 @@ func body(release, run string, targets []string) string {
 		"pulled from ghcr.io/spin-stack/spin-release and held by cosign to what spin's release workflow signed and attested of " +
 		release + ", and a VSIX of each.\n\n" +
 		"Left to whoever merges it, as versions.yaml's note says: the CLI's contract against `src/cli/contract.ts`, " +
-		"and the extension tried against an installation of " + release + ". A tag then publishes it.\n\n" +
+		"and the extension tried against an installation of " + release + ".\n\n" +
+		"Merging it releases the extension as " + version + ": `.github/workflows/tag.yml` tags main `" + tag + "`, " +
+		"and that tag publishes it to the GitHub release, ghcr, the Marketplace and Open VSX.\n\n" +
 		"spin-stack/shipset dispatches this for each spin release (`.github/workflows/bump-spin.yml`); " +
 		"a newer one rewrites this branch and this pull request, commits added here included.\n"
 }

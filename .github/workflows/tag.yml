@@ -1,0 +1,43 @@
+name: Tag
+
+# A push to main whose package.json holds a version no tag has yet is a release: this tags that
+# commit v<version> - v<version>-pre for an odd minor, the Marketplace's pre-release convention -
+# and the tag runs Publish. The Bump spin workflow's pull request moves the
+# version to the next patch, so merging it releases the extension with that spin release's CLI; a
+# person who sets a version by hand releases it the same way, on merge. As the release app (spin-stack-release), because a tag pushed with
+# this run's own token would start no workflow.
+on:
+  push:
+    branches: [main]
+    paths: [package.json]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app
+        with:
+          client-id: Iv23licJKNgsPIM00SD0 # spin-stack-release's client ID, public: app-id is deprecated
+          private-key: ${{ secrets.RELEASE_APP_KEY }}
+          owner: spin-stack
+          repositories: vscode-spinbox
+          permission-contents: write
+      - run: go tool task release:tag
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}

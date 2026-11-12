@@ -104,10 +104,10 @@ describe("prepareConnection", () => {
   })
 
   it("shows a refusal with its action, then closes the remote", async () => {
-    const { deps, seen } = setup({ FAKE_SPIN_ERROR: "no_key_held" })
+    const { deps, seen } = setup({ FAKE_SPIN_ERROR: "key_not_enrolled" })
     expect(await prepareConnection(deps, "ssh-remote", "ssh-remote+spin.my-ws")).toBe(false)
     expect(seen.errors).toHaveLength(1)
-    expect((seen.errors[0] as CliError).code).toBe("no_key_held")
+    expect((seen.errors[0] as CliError).code).toBe("key_not_enrolled")
     expect(seen.closed).toBe(1)
   })
 

@@ -117,15 +117,19 @@ describe("fileProxyStatus", () => {
 })
 
 describe("proxyFailure", () => {
-  it("is the CLI's envelope for a code the contract knows", () => {
-    const error = { code: "no_capacity", action: "retry", message: "full" }
-    expect(proxyFailure(status("failed", { error }))).toEqual({ envelope: { error } })
+  it.each([
+    ["a refusal", "refused", KEY_NOT_ENROLLED],
+    ["a failure", "failed", { code: "no_capacity", action: "retry", message: "full" }],
+  ] as const)("is the CLI's envelope, with its action, for %s", (_what, phase, error) => {
+    expect(proxyFailure(status(phase, { error }))).toEqual({ envelope: { error } })
   })
 
+  // A release newer than the contract can write a code it does not know yet.
   it("is the message and its page for a code the contract does not know", () => {
-    expect(proxyFailure(status("refused", { error: KEY_NOT_ENROLLED }))).toEqual({
-      message: `Spinbox could not connect to ${HOST}: ${KEY_NOT_ENROLLED.message}`,
-      url: KEY_NOT_ENROLLED.url,
+    const error = { ...KEY_NOT_ENROLLED, code: "key_revoked" }
+    expect(proxyFailure(status("refused", { error }))).toEqual({
+      message: `Spinbox could not connect to ${HOST}: ${error.message}`,
+      url: error.url,
     })
   })
 

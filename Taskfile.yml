@@ -54,6 +54,20 @@ tasks:
       - task: build
       - '{{if .XVFB}}xvfb-run -a {{end}}pnpm test:integration'
 
+  test:remote-ssh:
+    desc: >-
+      The packaged VSIX and Microsoft's Remote-SSH in a real VS Code stable, opening the workspaces
+      of a spin e2e stack as a reconnect does (test/remote-ssh/run.mjs): Spinbox readies each before
+      Remote-SSH resolves it, and a refused key closes the remote with Spinbox's message. Needs the
+      stack - SPIN_STACK=<spin checkout> after its `task e2e:up` and `task e2e:workspaces` - and
+      bwrap, so no workflow runs it. Under xvfb-run when it is installed.
+    vars:
+      XVFB:
+        sh: command -v xvfb-run || true
+    cmds:
+      - task: package
+      - '{{if .XVFB}}xvfb-run -a {{end}}node test/remote-ssh/run.mjs'
+
   package:
     desc: Package the extension into spinbox.vsix with vsce, without the CLI - what CI's gate checks packages. package:all makes the ones that are published.
     cmds:

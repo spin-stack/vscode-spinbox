@@ -184,6 +184,21 @@ tasks:
       - '[ -z "${GH_TOKEN:-}" ] || gh auth setup-git'
       - versions bump spin "{{.RELEASE}}"
 
+  contract:spin:
+    desc: Hold src/cli/contract.ts's error codes and actions to errorActions in spin's cmd/cli/cmd/errcode.go at the release versions.yaml pins (hack/errcodes), read from spin's repository over git - with GH_TOKEN as git's credentials when it is set, since spin is private. The Bump spin workflow runs it after the bump, so a release that adds or drops a code is a red bump, not an envelope read as internal.
+    vars:
+      SPIN:
+        sh: versions version spin
+    cmds:
+      - '[ -z "${GH_TOKEN:-}" ] || gh auth setup-git'
+      - |
+        set -eu
+        dir=$(mktemp -d)
+        trap 'rm -rf "$dir"' EXIT
+        git clone --quiet --depth 1 --branch {{.SPIN}} --filter=blob:none --no-checkout https://github.com/spin-stack/spin "$dir/spin"
+        git -C "$dir/spin" show HEAD:cmd/cli/cmd/errcode.go > "$dir/errcode.go"
+        go run ./hack/errcodes -spin "$dir/errcode.go" -contract src/cli/contract.ts
+
   spin:propose:
     desc: Commit versions.yaml's spin at RELEASE, with package.json at the next patch when its version is tagged already, push it to spin/next and open or rewrite the pull request there, as the app GH_TOKEN and APP_SLUG name (hack/spinpropose) - the Bump spin workflow's last step, after task ci and task package:all.
     requires:

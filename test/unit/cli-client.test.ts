@@ -141,10 +141,10 @@ describe("ProcessSpinCli failures", () => {
   })
 
   it("keeps the envelope's fields", async () => {
-    scenario({ code: { error: "access_needs_signature", url: "https://app.spinbox.test/s" } })
+    scenario({ code: { error: "key_not_enrolled", url: "https://app.spinbox.test/settings/keys" } })
     const e = (await rejection(cli().cli.code("my-ws", undefined, "a".repeat(40)))) as CliError
     expect(e.envelope.error).toMatchObject({
-      code: "access_needs_signature",
+      code: "key_not_enrolled",
       url: expect.any(String),
     })
   })

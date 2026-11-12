@@ -248,14 +248,14 @@ describe("openWorkspace", () => {
   })
 
   it("hands a failure to the errors module with a retry that runs it again, and opens nothing", async () => {
-    const { deps, seen } = setup({ FAKE_SPIN_ERROR: "access_needs_signature" })
+    const { deps, seen } = setup({ FAKE_SPIN_ERROR: "key_not_enrolled" })
     await openWorkspace(deps, { workspace: "ws-1" })
     expect(seen.opened).toEqual([])
     expect(seen.cliErrors).toHaveLength(1)
     const [{ error, retry }] = seen.cliErrors as [Seen["cliErrors"][number]]
     expect(error).toBeInstanceOf(CliError)
-    expect((error as CliError).code).toBe("access_needs_signature")
-    await expect(retry()).rejects.toMatchObject({ code: "access_needs_signature" })
+    expect((error as CliError).code).toBe("key_not_enrolled")
+    await expect(retry()).rejects.toMatchObject({ code: "key_not_enrolled" })
     expect(seen.invocations()).toHaveLength(2)
     expect(seen.cliErrors).toHaveLength(1)
   })

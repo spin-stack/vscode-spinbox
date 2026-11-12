@@ -39,7 +39,6 @@ export const BUTTON = {
   signIn: "Sign In",
   start: "Start",
   dashboard: "Open in Dashboard",
-  sign: "Sign in Browser",
   addKey: "Add Key",
   retry: "Retry",
 } as const
@@ -93,14 +92,11 @@ async function show(error: unknown, retry: Retry | undefined, updated: boolean):
       )
     case "workspace_failed":
       return offerUrl(withReason(TEXT.workspace_failed, e.message), BUTTON.dashboard, e.url)
-    case "access_needs_signature":
-      return offerUrl(TEXT.access_needs_signature, BUTTON.sign, e.url)
-    case "keyring_needs_signature":
-      return signKeyring(e.url, retry === undefined ? undefined : () => again())
-    case "no_key_held":
+    case "key_not_enrolled":
       // A key is worth adding with nothing to run again: the next command finds it.
       if (
-        (await vscode.window.showErrorMessage(TEXT.no_key_held, BUTTON.addKey)) === BUTTON.addKey
+        (await vscode.window.showErrorMessage(TEXT.key_not_enrolled, BUTTON.addKey)) ===
+        BUTTON.addKey
       ) {
         try {
           await addKey(() => again())
@@ -113,6 +109,8 @@ async function show(error: unknown, retry: Retry | undefined, updated: boolean):
     case "no_capacity":
     case "unreachable":
       return offer(vscode.window.showErrorMessage, TEXT[e.code], BUTTON.retry, retry, () => again())
+    case "no_extension_release":
+      return internal(e, traceId, TEXT.no_extension_release)
     case "no_vscode_server":
       // The message is what was refused and what resolves it - an administrator's publish, or
       // more room - so it is shown whole, with what internal offers beside it.
@@ -128,38 +126,16 @@ export const TEXT = {
   not_signed_in: "You are signed out of Spinbox. Sign in to continue.",
   workspace_stopped: "This workspace is stopped. Start it to open it.",
   workspace_failed: "This workspace failed. Open it in the dashboard to see why.",
-  access_needs_signature:
-    "This workspace needs your signature. Sign in the browser, then try again.",
-  keyring_needs_signature:
-    "Your keyring does not list this machine's key yet. Sign it in the browser, then try again.",
-  no_key_held: "This machine holds none of your SSH keys. Add one to your account to connect.",
+  key_not_enrolled:
+    "The key this machine connects with is not on your account. Add it, with your passkey, to connect.",
   no_capacity: "No host has room for this workspace right now. Try again in a moment.",
   unreachable: "Spinbox cannot reach the installation. Check your connection and try again.",
+  no_extension_release: "No release of the Spinbox extension carries this spin CLI's release.",
   no_vscode_server: "This workspace has no server for your VS Code, and no room to download one.",
   internal: "Spinbox hit an unexpected error.",
 } as const satisfies Record<ErrorCode, string>
 
-// Shown once the signing page is open, for the person to come back to.
-export const KEYRING_SIGNED = "Once your keyring is signed in the browser, retry."
-
-// keyring_needs_signature: the keyring is signed in the browser, away from VS Code, so what the
-// person comes back to is a notification that runs the command again once they have.
-async function signKeyring(url: string | undefined, again: (() => Promise<void>) | undefined) {
-  const buttons = url === undefined ? [] : [BUTTON.sign]
-  const choice = await vscode.window.showErrorMessage(TEXT.keyring_needs_signature, ...buttons)
-  if (choice !== BUTTON.sign || url === undefined) {
-    return
-  }
-  await vscode.env.openExternal(vscode.Uri.parse(url))
-  if (
-    again !== undefined &&
-    (await vscode.window.showInformationMessage(KEYRING_SIGNED, BUTTON.retry)) === BUTTON.retry
-  ) {
-    await again()
-  }
-}
-
-// The public key spin connects with where the keyring lists none of this machine's: the first of
+// The public key spin connects with where the account has none of this machine's: the first of
 // the usual ones in ~/.ssh, or spin's own (cmd/cli/cmd/ssh.go, usualIdentity). Undefined when this
 // machine has none of them.
 export function keyToAdd(home: string): string | undefined {
@@ -171,9 +147,9 @@ export function keyToAdd(home: string): string | undefined {
   ].find((p) => existsSync(p))
 }
 
-// no_key_held: `spin ssh-key add` in a terminal, named for this machine, with the key spin
-// connects with. At a terminal it goes on to get the keyring signed - here, or with a passkey in
-// the browser - which only a person can finish, so it is run there and not by the extension. With
+// key_not_enrolled: `spin ssh-key add` in a terminal, named for this machine, with the key spin
+// connects with. It opens the page where the person's passkey confirms the key, and waits - which
+// only a person can finish, so it is run there and not by the extension. With
 // no key to add, the terminal has the command that makes one and adds it, ready to run. The
 // command runs again once the terminal ends with exit 0.
 async function addKey(again: () => Promise<void>): Promise<void> {

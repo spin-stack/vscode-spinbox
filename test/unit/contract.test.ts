@@ -63,7 +63,7 @@ describe("fake spin", () => {
     writeFileSync(
       scenario,
       JSON.stringify({
-        code: { error: "access_needs_signature", url: "https://app.spinbox.test/sign/ws-1" },
+        code: { error: "key_not_enrolled", url: "https://app.spinbox.test/settings/keys?x=1" },
       }),
     )
     const env = { FAKE_SPIN_SCENARIO: scenario }
@@ -72,10 +72,10 @@ describe("fake spin", () => {
     expect(r.docs).toEqual([
       {
         error: {
-          code: "access_needs_signature",
-          action: "sign",
-          message: "fake access_needs_signature",
-          url: "https://app.spinbox.test/sign/ws-1",
+          code: "key_not_enrolled",
+          action: "add_key",
+          message: "fake key_not_enrolled",
+          url: "https://app.spinbox.test/settings/keys?x=1",
         },
       },
     ])

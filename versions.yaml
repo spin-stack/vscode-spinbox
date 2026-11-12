@@ -40,3 +40,16 @@
   note: >-
     The Task `go tool task` runs (go-tools' cmd/task), for every platform a person or a runner
     works on: no repository compiles it.
+
+- name: vscode
+  kind: git
+  source: https://github.com/microsoft/vscode
+  version: 1.145.2
+  pin: c4453f8ea430795f941c1b2ff6c9321135a74a02
+  track: github-release
+  note: >-
+    The VS Code stable test:integration checks the resolver's detection against
+    (test/integration/run.mjs), downloaded by @vscode/test-electron. It has to be a release that
+    withholds a proposed API from an extension argv.json does not name: up to at least 1.128,
+    isProposedApiEnabled answered true for any extension that declared one, so the stand-in
+    activates either way and the run without the flag fails. A bump is test:integration green.

@@ -45,10 +45,13 @@ tasks:
       - pnpm test:cli
 
   test:integration:
-    desc: test:cli, then the extension activated in a real VS Code, downloaded into .vscode-test/. Under xvfb-run when it is installed, which CI's runner has; otherwise on the display there is.
+    desc: test:cli, then the extension activated in a real VS Code, downloaded into .vscode-test/ - the one engines.vscode names, and versions.yaml's vscode for the resolver's detection. Under xvfb-run when it is installed, which CI's runner has; otherwise on the display there is.
     vars:
       XVFB:
         sh: command -v xvfb-run || true
+    env:
+      VSCODE_GATED:
+        sh: versions version vscode
     cmds:
       - task: test:cli
       - task: build

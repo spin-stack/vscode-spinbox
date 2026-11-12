@@ -1,0 +1,21 @@
+{
+  "name": "open-remote-ssh",
+  "displayName": "A stand-in for spin-stack.open-remote-ssh",
+  "description": "Registers the spin resolver as spin-stack.open-remote-ssh does, so the suite checks Spinbox's detection of it against a real VS Code.",
+  "version": "0.0.0",
+  "publisher": "spin-stack",
+  "private": true,
+  "engines": {
+    "vscode": "^1.120.0"
+  },
+  "extensionKind": [
+    "ui"
+  ],
+  "main": "./extension.cjs",
+  "enabledApiProposals": [
+    "resolvers"
+  ],
+  "activationEvents": [
+    "onResolveRemoteAuthority:spin"
+  ]
+}

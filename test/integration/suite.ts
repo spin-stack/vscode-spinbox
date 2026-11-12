@@ -2,6 +2,7 @@ import * as assert from "node:assert/strict"
 import { join } from "node:path"
 import * as vscode from "vscode"
 import { COMMANDS } from "../../src/commands"
+import { route } from "../../src/remote/resolver"
 
 // Run in VS Code's extension host by @vscode/test-electron: a rejection fails the run.
 export async function run(): Promise<void> {
@@ -29,5 +30,13 @@ export async function run(): Promise<void> {
   assert.deepEqual(
     accounts.map((a) => a.label),
     ["dev@example.com"],
+  )
+
+  // The resolver is detected by its activation, which only the proposed API lets through.
+  assert.deepEqual(
+    await route(),
+    process.env.SPINBOX_WANT_ROUTE === "spin"
+      ? { spin: true }
+      : { spin: false, because: "disabled" },
   )
 }

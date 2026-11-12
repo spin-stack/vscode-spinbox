@@ -5,7 +5,7 @@ one in a new window, without leaving the editor.
 
 ## Requirements
 
-- VS Code 1.120 or newer, or an editor built on it that installs from Open VSX (VSCodium,
+- VS Code 1.146 or newer, or an editor built on it that installs from Open VSX (VSCodium,
   Cursor, ...).
 - A Remote-SSH extension: Microsoft's `ms-vscode-remote.remote-ssh` in VS Code, or
   `jeanp413.open-remote-ssh` elsewhere. When none is installed, Spinbox offers to install the one
@@ -13,26 +13,28 @@ one in a new window, without leaving the editor.
 - A Spinbox account, with an SSH key of this machine added to it. If none is, Spinbox says so and
   offers to add one.
 
+The extension carries the `spin` CLI it needs, for Linux and macOS on x64 and arm64: there is
+nothing else to install.
+
 ## Spinbox's own connection
 
-With `spin-stack.open-remote-ssh` installed and allowed VS Code's proposed API, Spinbox opens a
-workspace as `vscode-remote://spin+<workspace>/...` instead of over Remote-SSH: the connection is
-Spinbox's, so a workspace that does not open says why, in VS Code, with what to do. Its server
-comes from your installation, never a download.
+With **Spinbox Remote** (`spin-stack.spinbox-remote`) installed and allowed VS Code's proposed
+API, Spinbox opens a workspace as `vscode-remote://spin+<workspace>/...` instead of over
+Remote-SSH: the connection is Spinbox's, so a workspace that does not open says why, in VS Code,
+with what to do. Its server comes from your installation, never a download.
 
-VS Code, VSCodium and the other editors let a third-party extension use a proposed API only when
-`argv.json` names it. Run **Preferences: Configure Runtime Arguments**, add this line inside the
-object it opens, and restart the editor:
+1. Install it with `spin vscode install`. The Visual Studio Marketplace does not carry an extension
+   that uses a proposed API.
+2. VS Code lets a third-party extension use a proposed API only when `argv.json` names it. Run
+   **Preferences: Configure Runtime Arguments**, add this line inside the object it opens, and
+   restart VS Code:
 
-```jsonc
-"enable-proposed-api": ["spin-stack.open-remote-ssh"]
-```
+   ```jsonc
+   "enable-proposed-api": ["spin-stack.spinbox-remote"]
+   ```
 
 Spinbox checks for it on every open: until the resolver activates, workspaces open over Remote-SSH,
 and Spinbox says once what is missing.
-
-The extension carries the `spin` CLI it needs, for Linux and macOS on x64 and arm64: there is
-nothing else to install.
 
 ## Getting started
 

@@ -1,5 +1,5 @@
 // The Spinbox workspace a window is connected to, read from its remote authority: Remote-SSH's
-// ssh-remote+spin.<workspace>, or spin+<workspace>, which spin-stack.open-remote-ssh resolves.
+// ssh-remote+spin.<workspace>, or spin+<workspace>, which Spinbox Remote resolves.
 export interface SpinRemote {
   // The SSH host spin code wrote into the SSH config: spin.<workspace>.
   host: string
@@ -10,8 +10,8 @@ export interface SpinRemote {
 
 const PREFIX = "ssh-remote+"
 
-// The extension that resolves spin+<workspace> (src/remote/resolver.ts).
-export const SPIN_RESOLVER = "spin-stack.open-remote-ssh"
+// Spinbox Remote, the extension that resolves spin+<workspace> (src/remote/resolver.ts).
+export const SPIN_RESOLVER = "spin-stack.spinbox-remote"
 
 // The authority its src/spin/authority.ts resolves, a workspace by the same rule.
 const SPIN_PREFIX = "spin+"

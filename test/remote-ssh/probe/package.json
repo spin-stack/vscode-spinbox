@@ -1,0 +1,19 @@
+{
+  "name": "remote-ssh-probe",
+  "displayName": "The remote-ssh lane's probe",
+  "description": "Says to test/remote-ssh/run.mjs what the window is connected to, runs a command in its terminal, and dismisses the notifications the lane asks it to.",
+  "version": "0.0.0",
+  "publisher": "spin-stack",
+  "private": true,
+  "engines": {
+    "vscode": "^1.146.0"
+  },
+  "extensionKind": [
+    "ui"
+  ],
+  "main": "./extension.cjs",
+  "activationEvents": [
+    "*",
+    "onResolveRemoteAuthority:ssh-remote"
+  ]
+}

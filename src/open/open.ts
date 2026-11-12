@@ -1,5 +1,6 @@
 import type { SpinCli } from "../cli/client"
 import type { Workspace } from "../cli/contract"
+import { SPIN_RESOLVER, spinFolderUri } from "../status/authority"
 import type { Trace } from "../telemetry"
 import { checkTarget, type OpenTarget } from "./target"
 
@@ -35,10 +36,12 @@ export interface OpenDeps {
   // The traceparent of a new trace for one operation, which every spin command it runs joins;
   // undefined with telemetry off (src/telemetry).
   trace: Trace
+  // Open the folder as spin+<workspace>, which SPIN_RESOLVER resolves, not over Remote-SSH.
+  spin: boolean
 }
 
 // openWorkspace runs `spin code <workspace> [path] --no-open --start --vscode-commit ...` and
-// opens the folder it answers in a new window. Every failure is shown, the CLI's with its action
+// opens the folder it answers in a new window, as spin+<workspace> when deps.spin. Every failure is shown, the CLI's with its action
 // and a retry that runs it again; cancelling shows nothing. Each attempt is a trace of its own.
 export async function openWorkspace(deps: OpenDeps, target: OpenTarget): Promise<void> {
   await open(deps, target, deps.trace())
@@ -78,7 +81,8 @@ async function open(
                 `Preparing VS Code ${p.vscode_version} for this installation (once): ${p.step}`,
               ),
           })
-          if (r.not_given !== undefined) {
+          // The resolver never downloads a server: it refuses, and says what to do, itself.
+          if (r.not_given !== undefined && !deps.spin) {
             deps.ui.showWarning(
               `VS Code downloads its own server into ${target.workspace} (about 220 MB): the installation could not prepare it. ${r.not_given}`,
             )
@@ -92,9 +96,17 @@ async function open(
         }
       },
     )
-    if (folderUri !== undefined) {
-      await deps.ui.openFolder(folderUri)
+    if (folderUri === undefined) {
+      return
     }
+    const uri = deps.spin ? spinFolderUri(folderUri) : folderUri
+    if (uri === undefined) {
+      deps.ui.showError(
+        `Spinbox cannot open ${target.workspace} through ${SPIN_RESOLVER}: spin answered ${folderUri}, which names no spin.<workspace> host.`,
+      )
+      return
+    }
+    await deps.ui.openFolder(uri)
   }
   try {
     await attempt(traceparent)

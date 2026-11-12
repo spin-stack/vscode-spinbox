@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 
-// Spinbox opens a workspace through a vscode-remote://ssh-remote+ URI, which only a Remote-SSH
-// extension answers. Microsoft's is on the Visual Studio Marketplace alone; every other editor
+// Without the resolver (resolver.ts), Spinbox opens a workspace through a
+// vscode-remote://ssh-remote+ URI, which only a Remote-SSH extension answers. Microsoft's is on the Visual Studio Marketplace alone; every other editor
 // (VSCodium, Cursor, ...) installs from Open VSX, where open-remote-ssh is the one there is.
 export const MICROSOFT_REMOTE_SSH = "ms-vscode-remote.remote-ssh"
 export const OPEN_REMOTE_SSH = "jeanp413.open-remote-ssh"

@@ -28,7 +28,11 @@ interface Seen {
 // progress as soon as it starts, as the notification's Cancel does.
 function setup(
   env: Record<string, string> = {},
-  opts: { cancel?: boolean; pick?: (ws: Workspace[]) => Workspace | undefined } = {},
+  opts: {
+    cancel?: boolean
+    pick?: (ws: Workspace[]) => Workspace | undefined
+    spin?: boolean
+  } = {},
 ): { deps: OpenDeps; seen: Seen } {
   const dir = mkdtempSync(join(tmpdir(), "open-"))
   const log = join(dir, "log")
@@ -80,6 +84,7 @@ function setup(
     commit: async () => COMMIT,
     vscodeVersion: "1.120.0",
     trace: () => undefined,
+    spin: opts.spin === true,
   }
   return { deps, seen }
 }
@@ -168,6 +173,78 @@ describe("openWorkspace", () => {
     expect(seen.warnings).toHaveLength(1)
     expect(seen.warnings[0]).toContain(why)
     expect(seen.opened).toEqual(["vscode-remote://ssh-remote+spin.my-ws/root"])
+  })
+
+  it("through the resolver, runs the same spin code and opens its folder as spin+<workspace>", async () => {
+    const { deps, seen } = setup({}, { spin: true })
+    await openWorkspace(deps, { workspace: "ws-1", path: "/root/src" })
+    expect(seen.invocations()).toEqual([
+      [
+        "code",
+        "ws-1",
+        "/root/src",
+        "--no-open",
+        "--vscode-commit",
+        COMMIT,
+        "--vscode-version",
+        "1.120.0",
+        "--start",
+        "-o",
+        "json",
+      ],
+    ])
+    expect(seen.opened).toEqual(["vscode-remote://spin+my-ws/root"])
+    expect(seen.errors).toEqual([])
+  })
+
+  // The resolver downloads no server: it refuses the workspace itself, saying what to do, so a
+  // warning that VS Code downloads one would be untrue.
+  it("through the resolver, does not say VS Code downloads a server", async () => {
+    const { deps, seen } = setup(
+      {
+        FAKE_SPIN_SCENARIO: scenario({
+          code: {
+            stdout: [
+              {
+                workspace_id: "ws-1",
+                host: "spin.my-ws",
+                folder_uri: "vscode-remote://ssh-remote+spin.my-ws/root",
+                server: "missing",
+                not_given: "no server",
+              },
+            ],
+          },
+        }),
+      },
+      { spin: true },
+    )
+    await openWorkspace(deps, { workspace: "ws-1" })
+    expect(seen.warnings).toEqual([])
+    expect(seen.opened).toEqual(["vscode-remote://spin+my-ws/root"])
+  })
+
+  it("through the resolver, says so and opens nothing when spin names a host that is no workspace", async () => {
+    const { deps, seen } = setup(
+      {
+        FAKE_SPIN_SCENARIO: scenario({
+          code: {
+            stdout: [
+              {
+                workspace_id: "ws-1",
+                host: "devbox",
+                folder_uri: "vscode-remote://ssh-remote+devbox/root",
+                server: "carried",
+              },
+            ],
+          },
+        }),
+      },
+      { spin: true },
+    )
+    await openWorkspace(deps, { workspace: "ws-1" })
+    expect(seen.opened).toEqual([])
+    expect(seen.errors).toHaveLength(1)
+    expect(seen.errors[0]).toContain("vscode-remote://ssh-remote+devbox/root")
   })
 
   it("hands a failure to the errors module with a retry that runs it again, and opens nothing", async () => {

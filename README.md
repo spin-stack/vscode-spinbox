@@ -13,6 +13,24 @@ one in a new window, without leaving the editor.
 - A Spinbox account, with an SSH key of this machine added to it. If none is, Spinbox says so and
   offers to add one.
 
+## Spinbox's own connection
+
+With `spin-stack.open-remote-ssh` installed and allowed VS Code's proposed API, Spinbox opens a
+workspace as `vscode-remote://spin+<workspace>/...` instead of over Remote-SSH: the connection is
+Spinbox's, so a workspace that does not open says why, in VS Code, with what to do. Its server
+comes from your installation, never a download.
+
+VS Code, VSCodium and the other editors let a third-party extension use a proposed API only when
+`argv.json` names it. Run **Preferences: Configure Runtime Arguments**, add this line inside the
+object it opens, and restart the editor:
+
+```jsonc
+"enable-proposed-api": ["spin-stack.open-remote-ssh"]
+```
+
+Spinbox checks for it on every open: until the resolver activates, workspaces open over Remote-SSH,
+and Spinbox says once what is missing.
+
 The extension carries the `spin` CLI it needs, for Linux and macOS on x64 and arm64: there is
 nothing else to install.
 
@@ -22,7 +40,8 @@ nothing else to install.
 2. Open **Spinbox Workspaces** in the Explorer and select **Sign In**, or run
    **Spinbox: Sign In** from the Command Palette. Spinbox then shows in the Accounts menu.
 3. Select a workspace's **Open Workspace** action. A stopped workspace is started first; it opens
-   in a new window over Remote-SSH.
+   in a new window, through Spinbox's own connection where it is enabled (above), otherwise over
+   Remote-SSH.
 
 ## Features
 

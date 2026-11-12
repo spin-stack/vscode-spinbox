@@ -64,6 +64,7 @@ function openDeps(cli: ProcessSpinCli, enabled: boolean): OpenDeps {
     commit: async () => "a".repeat(40),
     vscodeVersion: "1.120.0",
     trace: tracer(() => enabled),
+    spin: false,
   }
 }
 

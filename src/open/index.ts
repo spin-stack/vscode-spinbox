@@ -1,6 +1,6 @@
 import * as vscode from "vscode"
 import { showCliError } from "../errors"
-import { ensureRemoteExtension } from "../remote/extension"
+import { openThrough } from "../remote/resolver"
 import { trace } from "../telemetry/vscode"
 import { readCommit } from "./editor"
 import { type OpenCli, type OpenDeps, type OpenUi, openWorkspace, pickAndOpen } from "./open"
@@ -45,24 +45,31 @@ const ui: OpenUi = {
   },
 }
 
-function deps(cli: OpenCli): OpenDeps {
+// deps answers what opening needs, or nothing when no extension is there to open what spin answers.
+async function deps(context: vscode.ExtensionContext, cli: OpenCli): Promise<OpenDeps | undefined> {
+  const spin = await openThrough(context.globalState)
+  if (spin === undefined) {
+    return undefined
+  }
   return {
     cli,
     ui,
     commit: () => readCommit(vscode.env.appRoot),
     vscodeVersion: vscode.version,
     trace,
+    spin,
   }
 }
 
 // registerOpen registers spinbox.openWorkspace and the handler of
 // vscode://spin-stack.spinbox/open?workspace=<id>&path=<absolute path>. Neither runs spin until
-// a Remote-SSH extension is there to open what it answers.
+// the resolver or a Remote-SSH extension is there to open what it answers.
 export function registerOpen(context: vscode.ExtensionContext, cli: OpenCli): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("spinbox.openWorkspace", async (arg?: unknown) => {
-      if (await ensureRemoteExtension()) {
-        await pickAndOpen(deps(cli), typeof arg === "string" ? arg : undefined)
+      const d = await deps(context, cli)
+      if (d !== undefined) {
+        await pickAndOpen(d, typeof arg === "string" ? arg : undefined)
       }
     }),
     vscode.window.registerUriHandler({
@@ -72,8 +79,9 @@ export function registerOpen(context: vscode.ExtensionContext, cli: OpenCli): vo
           ui.showError(`Spinbox cannot open this link: ${parsed.reason}.`)
           return
         }
-        if (await ensureRemoteExtension()) {
-          await openWorkspace(deps(cli), parsed.target)
+        const d = await deps(context, cli)
+        if (d !== undefined) {
+          await openWorkspace(d, parsed.target)
         }
       },
     }),

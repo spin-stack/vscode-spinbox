@@ -28,11 +28,10 @@ const ACTION_OF = {
   not_signed_in: "login",
   workspace_stopped: "start",
   workspace_failed: "open_dashboard",
-  access_needs_signature: "sign",
-  keyring_needs_signature: "sign_keyring",
-  no_key_held: "add_key",
+  key_not_enrolled: "add_key",
   no_capacity: "retry",
   unreachable: "retry",
+  no_extension_release: "details",
   no_vscode_server: "details",
   internal: "details",
 }
@@ -173,9 +172,7 @@ function envelope(code, extra) {
           message: `fake ${code}`,
           action: ACTION_OF[code],
           ...(code === "cli_outdated" ? { release: "v20261105.01" } : {}),
-          ...(code === "keyring_needs_signature"
-            ? { url: "https://term.spinbox.test/#/sign" }
-            : {}),
+          ...(code === "key_not_enrolled" ? { url: `${ENDPOINT}/settings/keys` } : {}),
           ...fields,
         },
       },

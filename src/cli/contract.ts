@@ -3,19 +3,21 @@
 // writes two lines), and a failure is one ErrorEnvelope on stdout with exit 1. These types are the
 // whole of what the extension reads; a field the CLI adds is ignored until a type here names it.
 
-// Each code, and the one action the CLI pairs with it. The CLI's list is cmd/cli/cmd/errcode.go.
+// Each code, and the one action the CLI pairs with it. The CLI's list is errorActions in its
+// cmd/cli/cmd/errcode.go, which `task contract:spin` (hack/errcodes) holds ACTION_OF to at the
+// release versions.yaml pins.
 export type ErrorCode =
   | "cli_outdated"
   | "not_signed_in"
   | "workspace_stopped"
   | "workspace_failed"
-  | "access_needs_signature"
-  // This machine holds a key the caller registered that their keyring does not list yet.
-  | "keyring_needs_signature"
-  // This machine holds none of the caller's registered keys.
-  | "no_key_held"
+  // The key this machine logs in with is none the installation certifies for the caller: adding
+  // it, with their passkey, lets it in.
+  | "key_not_enrolled"
   | "no_capacity"
   | "unreachable"
+  // No release of this extension carries the CLI's release (`spin vscode install`).
+  | "no_extension_release"
   // The workspace has no server for this VS Code, could not be given one, and has no room for
   // the one VS Code would download: opened, Remote-SSH would reconnect without end.
   | "no_vscode_server"
@@ -26,8 +28,6 @@ export type Action =
   | "login"
   | "start"
   | "open_dashboard"
-  | "sign"
-  | "sign_keyring"
   | "add_key"
   | "retry"
   | "details"
@@ -38,11 +38,10 @@ export const ACTION_OF = {
   not_signed_in: "login",
   workspace_stopped: "start",
   workspace_failed: "open_dashboard",
-  access_needs_signature: "sign",
-  keyring_needs_signature: "sign_keyring",
-  no_key_held: "add_key",
+  key_not_enrolled: "add_key",
   no_capacity: "retry",
   unreachable: "retry",
+  no_extension_release: "details",
   no_vscode_server: "details",
   internal: "details",
 } as const satisfies Record<ErrorCode, Action>
@@ -57,9 +56,8 @@ export interface ErrorEnvelope {
     // The release the installation runs, with cli_outdated.
     release?: string
     workspace_id?: string
-    // A page that resolves it: the signature page for access_needs_signature, the page where a
-    // passkey signs the keyring for keyring_needs_signature, the workspace's dashboard page for
-    // workspace_failed.
+    // A page that resolves it: the keys page, behind a passkey, for key_not_enrolled; the
+    // workspace's dashboard page for workspace_failed.
     url?: string
   }
 }

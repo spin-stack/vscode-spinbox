@@ -5,15 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { CliError } from "../../src/cli/client"
 import type { ErrorCode, ErrorEnvelope } from "../../src/cli/contract"
 import { ACTION_OF, ERROR_CODES } from "../../src/cli/contract"
-import {
-  BUTTON,
-  configureErrors,
-  KEYRING_SIGNED,
-  keyToAdd,
-  type Retry,
-  showCliError,
-  TEXT,
-} from "../../src/errors"
+import { BUTTON, configureErrors, keyToAdd, type Retry, showCliError, TEXT } from "../../src/errors"
 
 const vs = vi.hoisted(() => ({
   showErrorMessage: vi.fn(),
@@ -109,7 +101,6 @@ interface Case {
 }
 
 const URL = "https://app.spinbox.test/w/ws-1"
-const SIGN_URL = "https://term.spinbox.test/#/sign"
 
 const CASES: Case[] = [
   {
@@ -144,30 +135,12 @@ const CASES: Case[] = [
     did: () => expect(String(vs.openExternal.mock.calls[0]?.[0])).toBe(URL),
   },
   {
-    code: "access_needs_signature",
-    extra: { url: URL },
-    text: TEXT.access_needs_signature,
-    button: BUTTON.sign,
-    did: () => expect(String(vs.openExternal.mock.calls[0]?.[0])).toBe(URL),
-  },
-  {
-    // The page opens, and the notification left behind runs the command again.
-    code: "keyring_needs_signature",
-    extra: { url: SIGN_URL },
-    setup: () => vs.showInformationMessage.mockResolvedValueOnce(BUTTON.retry),
-    text: TEXT.keyring_needs_signature,
-    button: BUTTON.sign,
-    did: (retry) => {
-      expect(String(vs.openExternal.mock.calls[0]?.[0])).toBe(SIGN_URL)
-      expect(vs.showInformationMessage).toHaveBeenCalledWith(KEYRING_SIGNED, BUTTON.retry)
-      expect(retry).toHaveBeenCalledWith(undefined)
-    },
-  },
-  {
-    // spin ssh-key add runs in a terminal with the key spin connects with; it ending well retries.
-    code: "no_key_held",
+    // spin ssh-key add runs in a terminal with the key spin connects with, and has the passkey
+    // confirm it; it ending well retries.
+    code: "key_not_enrolled",
+    extra: { url: "https://app.spinbox.test/settings/keys" },
     setup: () => home(".ssh/id_ed25519.pub"),
-    text: TEXT.no_key_held,
+    text: TEXT.key_not_enrolled,
     button: BUTTON.addKey,
     did: (retry) => {
       expect(vs.createTerminal).toHaveBeenCalledWith({
@@ -194,6 +167,12 @@ const CASES: Case[] = [
     text: TEXT.unreachable,
     button: BUTTON.retry,
     did: (retry) => expect(retry).toHaveBeenCalledWith(undefined),
+  },
+  {
+    code: "no_extension_release",
+    text: `${TEXT.no_extension_release} no_extension_release msg`,
+    button: BUTTON.details,
+    did: () => expect(output.show).toHaveBeenCalled(),
   },
   {
     // What resolves it is the CLI's message, shown whole.
@@ -237,33 +216,20 @@ describe("showCliError", () => {
     expect(output.show).not.toHaveBeenCalled()
   })
 
-  it("keyring_needs_signature: the page opened and Retry not chosen, runs nothing again", async () => {
-    const retry = vi.fn<Retry>()
-    click(BUTTON.sign)
-    await showCliError(cliError("keyring_needs_signature", { url: SIGN_URL }), retry)
-    expect(vs.openExternal).toHaveBeenCalledOnce()
-    expect(retry).not.toHaveBeenCalled()
-  })
-
-  it("keyring_needs_signature: without a url, offers no page to open", async () => {
-    await showCliError(cliError("keyring_needs_signature"), vi.fn<Retry>())
-    expect(shown().buttons).toEqual([])
-  })
-
-  it("no_key_held: a terminal that did not end well runs nothing again", async () => {
+  it("key_not_enrolled: a terminal that did not end well runs nothing again", async () => {
     const retry = vi.fn<Retry>()
     home(".ssh/id_ed25519.pub")
     exitCode = 1
     click(BUTTON.addKey)
-    await showCliError(cliError("no_key_held"), retry)
+    await showCliError(cliError("key_not_enrolled"), retry)
     expect(vs.createTerminal).toHaveBeenCalledOnce()
     expect(retry).not.toHaveBeenCalled()
   })
 
-  it("no_key_held: with no key, the terminal has the command that makes one and adds it, not run", async () => {
+  it("key_not_enrolled: with no key, the terminal has the command that makes one and adds it, not run", async () => {
     const dir = home()
     click(BUTTON.addKey)
-    await showCliError(cliError("no_key_held"), vi.fn<Retry>())
+    await showCliError(cliError("key_not_enrolled"), vi.fn<Retry>())
     expect(vs.createTerminal).toHaveBeenCalledWith({ name: "Spinbox: Add Key" })
     const made = join(dir, ".ssh", "id_ed25519")
     const terminal = vs.createTerminal.mock.results[0]?.value as {

@@ -10,8 +10,9 @@
 //   - stopped: the same, with the workspace started by that `spin code --start`, and no error of
 //     Remote-SSH's;
 //   - unenrolled: with a key the account does not have, Spinbox says key_not_enrolled (whose
-//     action is Add Key), Remote-SSH never resolves, and once the message is closed - READ_MS
-//     after it is said, as a person reads it - the window leaves the remote.
+//     action is Add Key) and Remote-SSH waits while it is up. Once it is closed - READ_MS after it
+//     is said, as a person reads it - Remote-SSH resolves once, spin ends its ssh at once (no
+//     askpass, no ConnectTimeout), its error follows within seconds, and the window is local.
 //
 // SPIN_STACK names the spin checkout whose stack is up: its bin/spin, and the fixture user's home
 // hack/e2estack keeps. Each case runs in bubblewrap with a home of its own bound over $HOME, since
@@ -53,6 +54,8 @@ const only = process.env.CASES?.split(",")
 const WAIT_MS = 360_000
 // How long the unenrolled case leaves Spinbox's message up before closing it.
 const READ_MS = Number(process.env.READ_MS ?? 30_000)
+// What "at once" is for a refused Remote-SSH: well under its 15 s ConnectTimeout.
+const QUICK_MS = 5_000
 
 const say = (line) => console.log(`==> ${line}`)
 
@@ -348,13 +351,24 @@ const cases = {
       o.resolving === undefined || o.resolvingMs >= dismissed?.t,
       [o.end, `message closed at ${dismissed?.t}`, `Remote-SSH: ${o.resolving}`],
     )
-    check("unenrolled: Remote-SSH never resolved", o.resolving === undefined, o.resolving)
-    const errors = errorsOf(s)
-    check("unenrolled: Remote-SSH said no error", errors.length === 0, errors.slice(0, 5))
+    // Then Remote-SSH connects once anyway (src/remote/connect.ts), and is ended at once by spin's
+    // ssh-proxy: no askpass box, no wait for its ConnectTimeout.
+    const gaveUp = errorsOf(s)[0]
+    const gaveUpMs = gaveUp === undefined ? undefined : timeOf(gaveUp, s.started)
+    check(
+      `unenrolled: Remote-SSH's error came within ${QUICK_MS / 1000} s of its resolver`,
+      o.resolvingMs !== undefined && gaveUpMs !== undefined && gaveUpMs - o.resolvingMs <= QUICK_MS,
+      [o.resolving, gaveUp],
+    )
+    const asked = s.remoteSSH.filter((l) => /askpass request|banner exchange/i.test(l))
+    check("unenrolled: Remote-SSH's ssh asked nothing and waited for nothing", asked.length === 0, [
+      ...asked.slice(0, 3),
+      s.remoteSSH.find((l) => l.includes("as the editor already said")),
+    ])
     const left = s.probe.filter((e) => e.event === "activate").at(-1)
     check(
-      "unenrolled: the window left the remote within 5 s of the message closing",
-      left?.remoteName === null && dismissed !== undefined && left.t - dismissed.t <= 5_000,
+      `unenrolled: the window left the remote within ${QUICK_MS / 1000} s of the message closing`,
+      left?.remoteName === null && dismissed !== undefined && left.t - dismissed.t <= QUICK_MS,
       `message closed at ${dismissed?.t}, window local at ${left?.t} (remoteName=${left?.remoteName})`,
     )
   },

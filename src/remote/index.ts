@@ -7,7 +7,7 @@ import { readCommit } from "../open/editor"
 import { parseSpinRemote } from "../status/authority"
 import { trace } from "../telemetry/vscode"
 import { type ConnectCli, prepareConnection } from "./connect"
-import { fileProxyStatus, type ProxyStatus, watchProxy } from "./proxy"
+import { fileProxyStatus, type ProxyFailure, proxyFailure, watchProxy } from "./proxy"
 
 export const CLOSE_REMOTE = "workbench.action.remote.close"
 
@@ -27,7 +27,6 @@ export async function connectWindow(cli: ConnectCli): Promise<void> {
   // proposal's, which this extension does not have.
   const authority = (vscode.workspace.workspaceFolders?.[0]?.uri ?? vscode.workspace.workspaceFile)
     ?.authority
-  const since = Date.now()
   const ready = await prepareConnection(
     {
       cli,
@@ -55,13 +54,15 @@ export async function connectWindow(cli: ConnectCli): Promise<void> {
   )
   const remote = parseSpinRemote(vscode.env.remoteName, authority)
   if (ready === true && remote !== undefined) {
-    void followProxy(join(homedir(), ".spin", "ssh", "hosts", remote.host), since)
+    // From now: spin code's own ssh, and the shared connection it leaves, began before.
+    void followProxy(remote.host, Date.now())
   }
 }
 
-async function followProxy(dir: string, since: number): Promise<void> {
+async function followProxy(host: string, since: number): Promise<void> {
   let said: vscode.Disposable | undefined
-  const status = await watchProxy(fileProxyStatus(dir, since), {
+  const dir = join(homedir(), ".spin", "ssh", "status")
+  const status = await watchProxy(fileProxyStatus(dir, host, since), {
     intervalMs: PROXY_INTERVAL_MS,
     timeoutMs: PROXY_TIMEOUT_MS,
     report: (message) => {
@@ -70,17 +71,25 @@ async function followProxy(dir: string, since: number): Promise<void> {
     },
   })
   said?.dispose()
-  if (status?.state === "failed") {
-    await showProxyFailure(status)
+  const failure = status === undefined ? undefined : proxyFailure(status)
+  if (failure !== undefined) {
+    await showProxyFailure(failure)
     await closeRemote()
   }
 }
 
-// A failure the CLI has a code for is shown with its action; any other with what it said.
-async function showProxyFailure(status: ProxyStatus): Promise<void> {
-  if (status.error !== undefined) {
-    await showCliError(new CliError({ error: status.error }))
+const OPEN = "Open"
+
+async function showProxyFailure(failure: ProxyFailure): Promise<void> {
+  if ("envelope" in failure) {
+    await showCliError(new CliError(failure.envelope))
     return
   }
-  await vscode.window.showErrorMessage(`Spinbox could not connect: ${status.message}`)
+  const pick = await vscode.window.showErrorMessage(
+    failure.message,
+    ...(failure.url === undefined ? [] : [OPEN]),
+  )
+  if (pick === OPEN && failure.url !== undefined) {
+    await vscode.env.openExternal(vscode.Uri.parse(failure.url))
+  }
 }

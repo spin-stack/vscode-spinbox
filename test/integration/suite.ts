@@ -32,11 +32,8 @@ export async function run(): Promise<void> {
     ["dev@example.com"],
   )
 
-  // The resolver is detected by its activation, which only the proposed API lets through.
-  assert.deepEqual(
-    await route(),
-    process.env.SPINBOX_WANT_ROUTE === "spin"
-      ? { spin: true }
-      : { spin: false, because: "disabled" },
-  )
+  // The resolver is detected by its activation, which only the proposed API lets through
+  // (run.mjs says which of missing, disabled and spin each run is).
+  const want = process.env.SPINBOX_WANT_ROUTE
+  assert.deepEqual(await route(), want === "spin" ? { spin: true } : { spin: false, because: want })
 }

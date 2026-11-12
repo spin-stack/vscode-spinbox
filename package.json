@@ -21,7 +21,7 @@
   },
   "packageManager": "pnpm@11.27.1",
   "engines": {
-    "vscode": "^1.120.0"
+    "vscode": "^1.146.0"
   },
   "categories": [
     "Other"
@@ -217,7 +217,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.6.3",
     "@types/node": "22.20.5",
-    "@types/vscode": "1.120.0",
+    "@types/vscode": "1.146.0",
     "@vscode/test-electron": "3.1.0",
     "@vscode/vsce": "4.1.0",
     "esbuild": "0.28.2",

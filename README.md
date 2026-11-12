@@ -51,6 +51,10 @@ and Spinbox says once what is missing.
   Sign Out, under **Spinbox** in the Command Palette.
 - **Links**: `vscode://spin-stack.spinbox/open?workspace=<id>` opens a workspace from a browser,
   and `&path=<absolute path>` a folder inside it.
+- **Reconnects that start the workspace**: a window reopening a workspace over Remote-SSH, by a
+  reload or from the recent list, has Spinbox start it and attach your VS Code's server first; a
+  refusal is shown with what fixes it, and the window leaves the remote instead of Remote-SSH
+  failing on its own.
 - **Errors you can act on**: an outdated CLI, a missing SSH key or no room for a workspace each say
   what fixes it, with a button for it where there is one.
 

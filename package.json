@@ -49,6 +49,7 @@
   "main": "./dist/extension.js",
   "activationEvents": [
     "onStartupFinished",
+    "onResolveRemoteAuthority:ssh-remote",
     "onUri",
     "onCommand:spinbox.openWorkspace",
     "onCommand:spinbox.signIn",

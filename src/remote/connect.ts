@@ -9,7 +9,11 @@ import type { Trace } from "../telemetry"
 // extension does (coder/vscode-coder docs/ARCHITECTURE.md): `spin code --start` starts it,
 // attaches this VS Code's server, writes the ssh config, and connects once through it - which runs
 // `spin ssh-prepare` and its launch-claim check - so a refusal is the CLI's error, with its action,
-// here. A failure closes the remote, so Remote-SSH does not go on to fail its own way.
+// here, first. A failure then closes the remote. That does not stop Remote-SSH: VS Code calls its
+// resolver once this activation returns, and holding the activation instead holds the window's
+// unload on that resolution forever. So Remote-SSH still connects once, and says briefly that it
+// could not: spin code keeps its refusal marked as told, and the ssh-proxy of Remote-SSH's ssh
+// ends at once on the same refusal rather than ask again (spin's toldAlready).
 
 export type ConnectCli = Pick<SpinCli, "code">
 

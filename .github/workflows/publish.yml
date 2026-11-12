@@ -4,12 +4,10 @@ name: Publish
 # the tag with SHA256SUMS signed by this workflow and pushed with them to the public package
 # ghcr.io/spin-stack/vscode-spinbox-release, which `spin vscode install` reads while this
 # repository's releases are a 404 to it (job release), then published to the Visual
-# Studio Marketplace and to Open VSX (job publish), as a pre-release when the tag holds -pre. The
-# release comes first and on its own: it exists, and is installable, whether or not a registry is
-# set up yet or answers. Both registries trust this workflow in the publish environment by OIDC
-# (docs/publishing.md), so no token is kept: the Marketplace retires personal access tokens on
-# 2026-12-01. OVSX_PAT is only for Open VSX's first publish, before its trusted publisher can be
-# registered; once it is, the secret is deleted and ovsx exchanges the job's ID token instead.
+# Studio Marketplace (job publish), as a pre-release when the tag holds -pre. The release comes
+# first and on its own: it exists, and is installable, whether or not the Marketplace is set up
+# yet or answers. The Marketplace trusts this workflow in the publish environment by OIDC
+# (docs/publishing.md), so no token is kept: it retires personal access tokens on 2026-12-01.
 
 on:
   push:
@@ -64,7 +62,7 @@ jobs:
       - run: go tool task publish:ghcr
         env:
           GH_TOKEN: ${{ github.token }}
-      # The registries publish these very bytes, the ones SHA256SUMS lists, not a second package.
+      # The Marketplace publishes these very bytes, the ones SHA256SUMS lists, not a second package.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: spinbox-vsix
@@ -79,7 +77,7 @@ jobs:
     environment: publish
     permissions:
       contents: read
-      # The token each registry exchanges for a short-lived publishing credential.
+      # The token the Marketplace exchanges for a short-lived publishing credential.
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -98,6 +96,3 @@ jobs:
         with:
           name: spinbox-vsix
       - run: go tool task publish:marketplace
-      - run: go tool task publish:openvsx
-        env:
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}

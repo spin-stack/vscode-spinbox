@@ -176,7 +176,7 @@ func body(release, run, version, tag string, targets []string) string {
 		"Left to whoever merges it, as versions.yaml's note says: the CLI's contract against `src/cli/contract.ts`, " +
 		"and the extension tried against an installation of " + release + ".\n\n" +
 		"Merging it releases the extension as " + version + ": `.github/workflows/tag.yml` tags main `" + tag + "`, " +
-		"and that tag publishes it to the GitHub release, ghcr, the Marketplace and Open VSX.\n\n" +
+		"and that tag publishes it to the GitHub release, ghcr and the Marketplace.\n\n" +
 		"spin-stack/shipset dispatches this for each spin release (`.github/workflows/bump-spin.yml`); " +
 		"a newer one rewrites this branch and this pull request, commits added here included.\n"
 }

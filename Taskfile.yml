@@ -87,14 +87,13 @@ tasks:
         rm -rf bin
 
   publish:
-    desc: Package every platform, attach each VSIX to the tag's GitHub release, and publish each to the Visual Studio Marketplace and to Open VSX - what the Publish workflow runs on a tag v*, step by step. It authenticates by the workflow's OIDC token (docs/publishing.md), so it runs only in that workflow.
+    desc: Package every platform, attach each VSIX to the tag's GitHub release, and publish each to the Visual Studio Marketplace - what the Publish workflow runs on a tag v*, step by step. It authenticates by the workflow's OIDC token (docs/publishing.md), so it runs only in that workflow.
     cmds:
       - task: publish:check
       - task: package:all
       - task: publish:github
       - task: publish:ghcr
       - task: publish:marketplace
-      - task: publish:openvsx
 
   publish:github:
     desc: >-
@@ -148,7 +147,7 @@ tasks:
       TAG: '{{.TAG}}'
     silent: true
     cmds:
-      # Without id-token: write, or outside Actions, both registries would only say they refused.
+      # Without id-token: write, or outside Actions, the Marketplace would only say it refused.
       - cmd: |
           if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
             echo "publish: no OIDC token: it runs in the Publish workflow, whose job has id-token: write (docs/publishing.md)" >&2
@@ -164,14 +163,8 @@ tasks:
   publish:marketplace:
     desc: Publish every VSIX in the repository's root to the Visual Studio Marketplace, as the publisher's trusted publishing policy for this workflow.
     cmds:
-      # --skip-duplicate: a run that failed on Open VSX is run again whole, and what the Marketplace already has is no error.
+      # --skip-duplicate: a run that failed after it is run again whole, and what the Marketplace already has is no error.
       - pnpm exec vsce publish --oidc --skip-duplicate {{.PRE_RELEASE}} --packagePath *.vsix
-
-  publish:openvsx:
-    desc: Publish every VSIX in the repository's root to Open VSX - with OVSX_PAT for the first publish, by the namespace's trusted publisher once one is registered.
-    cmds:
-      # With no OVSX_PAT, ovsx exchanges the job's ID token itself (trusted publishing).
-      - pnpm exec ovsx publish --skip-duplicate {{.PRE_RELEASE}} --packagePath *.vsix
 
   spin:newer:
     desc: Whether GIVEN, a spin release, is newer than versions.yaml's spin, as release=<it or nothing> - the Bump spin workflow's first step (versions newer).

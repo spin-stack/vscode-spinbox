@@ -7,7 +7,6 @@ const vscode = vi.hoisted(() => {
   return {
     installed,
     changeListeners,
-    env: { appName: "Visual Studio Code" },
     extensions: {
       getExtension: (id: string) => (installed.has(id) ? { id } : undefined),
       onDidChange: (fn: () => void) => {
@@ -32,7 +31,6 @@ import {
   ensureRemoteExtension,
   INSTALL_WAIT_MS,
   MICROSOFT_REMOTE_SSH,
-  OPEN_REMOTE_SSH,
 } from "../../src/remote/extension"
 
 // installLater has the install command return before the extension host loads the extension,
@@ -49,7 +47,6 @@ function installLater(): void {
 beforeEach(() => {
   vscode.installed.clear()
   vscode.changeListeners.clear()
-  vscode.env.appName = "Visual Studio Code"
   vscode.window.showWarningMessage.mockReset()
   vscode.window.showErrorMessage.mockReset()
   vscode.commands.executeCommand.mockReset()
@@ -57,24 +54,17 @@ beforeEach(() => {
 })
 
 describe("ensureRemoteExtension", () => {
-  it.each([MICROSOFT_REMOTE_SSH, OPEN_REMOTE_SSH])(
-    "goes on without asking when %s is installed",
-    async (id) => {
-      vscode.installed.add(id)
-      vscode.env.appName = id === OPEN_REMOTE_SSH ? "VSCodium" : "Visual Studio Code"
-      expect(await ensureRemoteExtension()).toBe(true)
-      expect(vscode.window.showWarningMessage).not.toHaveBeenCalled()
-      expect(vscode.commands.executeCommand).not.toHaveBeenCalled()
-    },
-  )
+  it("goes on without asking when Remote-SSH is installed", async () => {
+    vscode.installed.add(MICROSOFT_REMOTE_SSH)
+    expect(await ensureRemoteExtension()).toBe(true)
+    expect(vscode.window.showWarningMessage).not.toHaveBeenCalled()
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalled()
+  })
 
-  it.each([
-    ["Visual Studio Code", MICROSOFT_REMOTE_SSH],
-    ["Visual Studio Code - Insiders", MICROSOFT_REMOTE_SSH],
-    ["VSCodium", OPEN_REMOTE_SSH],
-    ["Cursor", OPEN_REMOTE_SSH],
-  ])("with none installed, %s offers %s and waits until it loads", async (appName, id) => {
-    vscode.env.appName = appName
+  // Another Remote-SSH extension answers nothing Spinbox relies on.
+  it("offers Remote-SSH, and waits until it loads, when another extension is all there is", async () => {
+    const id = MICROSOFT_REMOTE_SSH
+    vscode.installed.add("jeanp413.open-remote-ssh")
     vscode.window.showWarningMessage.mockImplementation(async (_m, ...items) => items[0])
     installLater()
     expect(await ensureRemoteExtension()).toBe(true)

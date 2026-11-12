@@ -52,7 +52,7 @@ A tag `v*` pushed to this repository runs `.github/workflows/publish.yml`. It pa
 platform once (`task package:all`), makes the tag's GitHub release (`task publish:github`),
 pushes the same files to the public package `ghcr.io/spin-stack/vscode-spinbox-release`
 (`task publish:ghcr`), and then publishes the same VSIXs to the Visual Studio Marketplace
-(`vsce`) and to Open VSX (`ovsx`). The tag is `v` followed by `package.json`'s `version`.
+(`vsce`). The tag is `v` followed by `package.json`'s `version`.
 
 Nobody pushes that tag for a release. A push to main that changes `package.json` runs
 `.github/workflows/tag.yml` (`task release:tag`): when no tag has the version it holds, it tags
@@ -60,8 +60,8 @@ that commit `v<version>`, or `v<version>-pre` for an odd minor (the Marketplace'
 pre-release), as the release app, since a tag pushed with the run's own token would start no
 workflow. So merging a bump releases it, and so does merging a version set by hand. The tag workflow needs `RELEASE_APP_KEY` too.
 
-The GitHub release comes first, in a job of its own, so it exists whether or not a registry is set
-up or answers. It holds:
+The GitHub release comes first, in a job of its own, so it exists whether or not the Marketplace is
+set up or answers. It holds:
 
 | File | What |
 |---|---|
@@ -89,7 +89,7 @@ a tag moved to another artifact can only point at another release this workflow 
 release notes say, and then `code --install-extension spinbox-<target>.vsix`.
 
 The package is made private by its first push, and nothing installs from it until someone makes
-it public, once: [docs/publishing.md](docs/publishing.md#6-ghcr-make-the-package-public).
+it public, once: [docs/publishing.md](docs/publishing.md#4-ghcr-make-the-package-public).
 
 A tag with `-pre` after it (`v0.3.0-pre`) publishes that version as a pre-release: the Marketplace takes no semver
 pre-release versions, and its convention is an odd minor for pre-releases.
@@ -98,9 +98,8 @@ pre-release versions, and its convention is an odd minor for pre-releases.
 git tag v0.3.0-pre && git push origin v0.3.0-pre   # package.json says "version": "0.3.0"
 ```
 
-Both registries trust the workflow by OIDC in the GitHub environment `publish`, so it keeps no
-token. A run that failed halfway is run again whole: both registries skip a version they already
-have.
+The Marketplace trusts the workflow by OIDC in the GitHub environment `publish`, so it keeps no
+token. A run that failed halfway is run again whole: the Marketplace skips a version it already
+has.
 
-How to create the two accounts, the publisher and the namespace, and the order to do it in, is
-[docs/publishing.md](docs/publishing.md).
+How to create the publisher, and the order to do it in, is [docs/publishing.md](docs/publishing.md).

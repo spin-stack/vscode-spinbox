@@ -1,32 +1,17 @@
 import * as vscode from "vscode"
 
 // Without the resolver (resolver.ts), Spinbox opens a workspace through a
-// vscode-remote://ssh-remote+ URI, which only a Remote-SSH extension answers. Microsoft's is on the Visual Studio Marketplace alone; every other editor
-// (VSCodium, Cursor, ...) installs from Open VSX, where open-remote-ssh is the one there is.
+// vscode-remote://ssh-remote+ URI, which Microsoft's Remote-SSH answers.
 export const MICROSOFT_REMOTE_SSH = "ms-vscode-remote.remote-ssh"
-export const OPEN_REMOTE_SSH = "jeanp413.open-remote-ssh"
-export const REMOTE_EXTENSIONS = [MICROSOFT_REMOTE_SSH, OPEN_REMOTE_SSH] as const
 
 // How long to wait for the extension host to load the extension after the install returns.
 export const INSTALL_WAIT_MS = 60_000
 
-export function installedRemoteExtension(): string | undefined {
-  return REMOTE_EXTENSIONS.find((id) => vscode.extensions.getExtension(id) !== undefined)
-}
-
-// The Visual Studio Marketplace serves only Microsoft's builds, whose appName starts with
-// "Visual Studio Code" (Insiders included); the extension API does not name the gallery.
-export function remoteExtensionForEditor(): string {
-  return vscode.env.appName.startsWith("Visual Studio Code")
-    ? MICROSOFT_REMOTE_SSH
-    : OPEN_REMOTE_SSH
-}
-
-// ensureRemoteExtension answers whether a Remote-SSH extension is installed, offering to install
-// the one this editor's marketplace carries when none is. false means the open cannot go on.
+// ensureRemoteExtension answers whether Remote-SSH is installed, offering to install it when it is
+// not. false means the open cannot go on.
 export async function ensureRemoteExtension(): Promise<boolean> {
-  if (installedRemoteExtension() !== undefined) return true
-  const id = remoteExtensionForEditor()
+  const id = MICROSOFT_REMOTE_SSH
+  if (vscode.extensions.getExtension(id) !== undefined) return true
   const install = `Install ${id}`
   const choice = await vscode.window.showWarningMessage(
     `Spinbox opens workspaces over Remote-SSH, which needs the ${id} extension.`,

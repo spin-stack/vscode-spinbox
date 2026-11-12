@@ -5,11 +5,9 @@ one in a new window, without leaving the editor.
 
 ## Requirements
 
-- VS Code 1.146 or newer, or an editor built on it that installs from Open VSX (VSCodium,
-  Cursor, ...).
-- A Remote-SSH extension: Microsoft's `ms-vscode-remote.remote-ssh` in VS Code, or
-  `jeanp413.open-remote-ssh` elsewhere. When none is installed, Spinbox offers to install the one
-  your editor's marketplace carries.
+- Microsoft VS Code 1.146 or newer.
+- Microsoft's Remote-SSH, `ms-vscode-remote.remote-ssh`. When it is not installed, Spinbox offers
+  to install it.
 - A Spinbox account, with an SSH key of this machine added to it. If none is, Spinbox says so and
   offers to add one.
 

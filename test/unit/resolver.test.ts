@@ -6,7 +6,6 @@ const vscode = vi.hoisted(() => {
   const installed = new Map<string, { activate: () => Promise<unknown> }>()
   return {
     installed,
-    env: { appName: "Visual Studio Code" },
     extensions: {
       getExtension: (id: string) => installed.get(id),
       onDidChange: () => ({ dispose: () => {} }),

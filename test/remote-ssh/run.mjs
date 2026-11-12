@@ -202,7 +202,7 @@ async function openCase(name, workspace, { enrolled, until }) {
       "--disable-gpu",
       `--user-data-dir=${userData}`,
       `--extensions-dir=${extensions}`,
-      `--extensionDevelopmentPath=${join(root, "test/remote-ssh/probe")}`,
+      `--extensionDevelopmentPath=${join(root, "test/remote-ssh/testdata/probe")}`,
       `--folder-uri=${folder}`,
       "--log=trace",
       "--skip-welcome",

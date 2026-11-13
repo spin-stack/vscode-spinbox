@@ -54,8 +54,11 @@ const only = process.env.CASES?.split(",")
 const WAIT_MS = 360_000
 // How long the unenrolled case leaves Spinbox's message up before closing it.
 const READ_MS = Number(process.env.READ_MS ?? 30_000)
-// What "at once" is for a refused Remote-SSH: well under its 15 s ConnectTimeout.
+// What "at once" is for a refused Remote-SSH's ssh: well under its 15 s ConnectTimeout.
 const QUICK_MS = 5_000
+// How long the window may take to start again, local: Remote-SSH's local server and its ssh, then
+// the unload - 10 s on a host at load 22. Waiting out the ConnectTimeout alone took 17 s.
+const LEAVE_MS = 15_000
 
 const say = (line) => console.log(`==> ${line}`)
 
@@ -157,13 +160,15 @@ async function openCase(name, workspace, { enrolled, until }) {
   // An empty system ssh config: in bubblewrap's namespace root's files are nobody's, which ssh
   // refuses to read.
   writeFileSync(join(dir, "ssh_config"), "")
-  // Each spin the extension runs, said with when it started and ended, around the real one.
+  // Each spin the extension runs, said with when it started and ended, around the real one. The
+  // time is bash's own clock read, in ms: uutils' `date +%s%3N` mixed one instant's seconds with
+  // another's milliseconds on a loaded host, and wrote an end before its start.
   const calls = join(dir, "spin-calls.log")
   const wrapper = join(dir, "spin")
-  const stamp = (what) => `echo "$(date +%s%3N) ${what} $*" >> ${calls}`
+  const stamp = (what) => `t=\${EPOCHREALTIME/./}; echo "\${t%???} ${what} $*" >> ${calls}`
   writeFileSync(
     wrapper,
-    `#!/bin/sh\n${stamp("start")}\n${spin} "$@"\nrc=$?\n${stamp("end $rc")}\nexit $rc\n`,
+    `#!/bin/bash\n${stamp("start")}\n${spin} "$@"\nrc=$?\n${stamp("end $rc")}\nexit $rc\n`,
   )
   chmodSync(wrapper, 0o755)
   mkdirSync(join(userData, "User"), { recursive: true })
@@ -231,6 +236,7 @@ async function openCase(name, workspace, { enrolled, until }) {
     spinbox: logOf(userData, "Spinbox.log"),
     remoteSSH: logOf(userData, "Remote - SSH.log"),
     exthost: logOf(userData, "exthost.log"),
+    renderer: logOf(userData, "renderer.log"),
   })
   let s = seen()
   const end = Date.now() + WAIT_MS
@@ -353,23 +359,37 @@ const cases = {
     )
     // Then Remote-SSH connects once anyway (src/remote/connect.ts), and is ended at once by spin's
     // ssh-proxy: no askpass box, no wait for its ConnectTimeout.
+    // From Remote-SSH's ssh: what comes before it is Remote-SSH starting its local server.
+    const spawned = s.remoteSSH.find((l) => /Spawned ssh, pid=/.test(l))
+    const spawnedMs = spawned === undefined ? undefined : timeOf(spawned, s.started)
     const gaveUp = errorsOf(s)[0]
     const gaveUpMs = gaveUp === undefined ? undefined : timeOf(gaveUp, s.started)
     check(
-      `unenrolled: Remote-SSH's error came within ${QUICK_MS / 1000} s of its resolver`,
-      o.resolvingMs !== undefined && gaveUpMs !== undefined && gaveUpMs - o.resolvingMs <= QUICK_MS,
-      [o.resolving, gaveUp],
+      `unenrolled: Remote-SSH's error came within ${QUICK_MS / 1000} s of its ssh`,
+      spawnedMs !== undefined && gaveUpMs !== undefined && gaveUpMs - spawnedMs <= QUICK_MS,
+      [o.resolving, spawned, gaveUp],
     )
     const asked = s.remoteSSH.filter((l) => /askpass request|banner exchange/i.test(l))
     check("unenrolled: Remote-SSH's ssh asked nothing and waited for nothing", asked.length === 0, [
       ...asked.slice(0, 3),
       s.remoteSSH.find((l) => l.includes("as the editor already said")),
     ])
+    // The window that replaces the remote one starts when the renderer starts up again; the
+    // probe's activation in it says it is local, and comes when its extension host does, later.
+    const reopened = s.renderer.filter((l) => l.includes("[lifecycle] starting up"))[1]
+    const reopenedMs = reopened === undefined ? undefined : Date.parse(reopened.slice(0, 23))
     const left = s.probe.filter((e) => e.event === "activate").at(-1)
     check(
-      `unenrolled: the window left the remote within ${QUICK_MS / 1000} s of the message closing`,
-      left?.remoteName === null && dismissed !== undefined && left.t - dismissed.t <= QUICK_MS,
-      `message closed at ${dismissed?.t}, window local at ${left?.t} (remoteName=${left?.remoteName})`,
+      `unenrolled: the window left the remote within ${LEAVE_MS / 1000} s of the message closing`,
+      left?.remoteName === null &&
+        dismissed !== undefined &&
+        reopenedMs !== undefined &&
+        reopenedMs - dismissed.t <= LEAVE_MS,
+      [
+        `message closed at ${new Date(dismissed?.t).toISOString()}`,
+        `window started again: ${reopened}`,
+        `probe in it: remoteName=${left?.remoteName}`,
+      ],
     )
   },
 }

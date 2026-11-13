@@ -84,11 +84,17 @@ func TestABumpIsOpenedAsTheAppOnTheOneBranch(t *testing.T) {
 	if err != nil || url != "https://github.com/spin-stack/vscode-spinbox/pull/9" {
 		t.Fatalf("%q, %v", url, err)
 	}
-	if c := ran(f, "git config user.email"); c != "git config user.email 42+spin-stack-release[bot]@users.noreply.github.com" {
-		t.Errorf("committed as %q", c)
+	c := ran(f, "git -c user.name=spin-stack-release[bot] -c user.email=42+spin-stack-release[bot]@users.noreply.github.com commit ")
+	if c == "" {
+		t.Errorf("not committed as the app: %q", f.ran)
 	}
-	if c := ran(f, "git commit"); !strings.HasSuffix(c, " versions.yaml "+p.pkg) {
+	if !strings.HasSuffix(c, " versions.yaml "+p.pkg) {
 		t.Errorf("committed %q, not versions.yaml and package.json", c)
+	}
+	// The app's identity is the commit's alone: one in the checkout's config is every later
+	// commit's from it.
+	if c := ran(f, "git config"); c != "" {
+		t.Errorf("wrote the checkout's config: %q", c)
 	}
 	if ran(f, "git push -q --force origin spin/next") == "" || ran(f, "gh pr edit") != "" {
 		t.Errorf("ran %q", f.ran)
@@ -96,7 +102,7 @@ func TestABumpIsOpenedAsTheAppOnTheOneBranch(t *testing.T) {
 	if c := ran(f, "gh pr list"); !strings.Contains(c, "--author app/spin-stack-release") {
 		t.Errorf("listed %q, not the app's alone", c)
 	}
-	c := ran(f, "gh pr create")
+	c = ran(f, "gh pr create")
 	for _, want := range []string{"--head spin/next", "--title versions: spin v20261106.01", "actions/runs/7", "(darwin-arm64, linux-x64)", "releases/tag/v20261106.01"} {
 		if !strings.Contains(c, want) {
 			t.Errorf("the pull request lacks %q: %s", want, c)

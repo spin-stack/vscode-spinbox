@@ -103,11 +103,12 @@ func (p proposal) open() (string, error) {
 		return "", err
 	}
 	title := "versions: spin " + p.release
+	// The app's identity on this one commit, never in the checkout's config: written there, every
+	// commit made from the checkout after it is the app's too.
+	as := []string{"-c", "user.name=" + p.app + "[bot]", "-c", fmt.Sprintf("user.email=%d+%s[bot]@users.noreply.github.com", user.ID, p.app)}
 	for _, args := range [][]string{
-		{"config", "user.name", p.app + "[bot]"},
-		{"config", "user.email", fmt.Sprintf("%d+%s[bot]@users.noreply.github.com", user.ID, p.app)},
 		{"checkout", "-q", "-B", branch},
-		{"commit", "-q", "-m", title, "-m", "The release whose CLI every VSIX carries, checked by " + p.run + ".", "versions.yaml", p.pkg},
+		append(as, "commit", "-q", "-m", title, "-m", "The release whose CLI every VSIX carries, checked by " + p.run + ".", "versions.yaml", p.pkg),
 		{"push", "-q", "--force", "origin", branch},
 	} {
 		if _, err := p.sh("git", args...); err != nil {

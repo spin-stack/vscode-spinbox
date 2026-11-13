@@ -2,7 +2,7 @@
   "name": "spinbox",
   "displayName": "Spinbox",
   "description": "Open Spinbox workspaces in VS Code over Remote-SSH, through the spin CLI.",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "publisher": "spin-stack",
   "icon": "images/icon.png",
   "galleryBanner": {

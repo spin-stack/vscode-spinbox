@@ -226,11 +226,14 @@ tasks:
       - go run ./hack/releasetag
 
   gate:
-    desc: What holds the repository's shape - every install through the firewall, and every workflow step a task.
+    desc: What holds the repository's shape - every install through the firewall, every workflow step a task, and no commit since origin/main by a test's identity.
     cmds:
       - sfw check
       # The Task running this one, which taskgate asks for the task names.
       - taskgate -task {{.TASK_EXE}}
+      # A test that writes git's author into the checkout makes every commit after it the
+      # test's; this refuses those commits before they reach main.
+      - testidentity -base origin/main
 
   ci:
     desc: What CI's Gate job runs - the gate, the install, lint, typecheck, the unit tests, and the package. test:integration is its own job.

@@ -33,10 +33,15 @@ tasks:
       - pnpm typecheck
 
   test:
-    desc: The unit tests - Vitest, against the fake spin in test/fake-spin/, and hack/'s Go.
+    desc: The unit tests - Vitest, against the fake spin in test/fake-spin/, with coverage held to the floor in vitest.config.mts - and hack/'s Go.
     cmds:
       - pnpm test
       - go test ./hack/...
+
+  coverage:summary:
+    desc: The coverage task test left in coverage/, as the job's summary (hack/coverage-summary.mjs); the HTML is coverage/index.html.
+    cmds:
+      - node hack/coverage-summary.mjs
 
   test:cli:
     desc: The extension's reader against the real spin CLI of the pinned release (test/cli/), pulled and checked by package:spin - minutes, so it is not in task test.

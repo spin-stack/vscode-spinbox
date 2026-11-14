@@ -7,3 +7,4 @@ dist-test/
 build/
 bin/
 .wt/
+coverage/

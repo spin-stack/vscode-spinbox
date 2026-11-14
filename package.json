@@ -199,7 +199,7 @@
         "spinbox.cliPath": {
           "type": "string",
           "default": "",
-          "scope": "machine",
+          "scope": "application",
           "description": "The spin CLI to run. Empty runs the one the extension carries."
         }
       }

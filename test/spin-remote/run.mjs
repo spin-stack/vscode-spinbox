@@ -14,17 +14,21 @@
 //     it had is the same shell;
 //   - unenrolled: with a key the account does not have, the resolver refuses with
 //     key_not_enrolled, says it once, and VS Code neither retries nor connects;
+//   - reuse: the dashboard's link for the workspace open in the window, by its id, handed to the
+//     running VS Code: Spinbox opens it, and VS Code brings that window rather than another
+//     (spin#1119: the dashboard learns nothing back, so the window has to be found here);
 //   - moved (only when CASES names it, with spin's `task e2e:hosts:up` run first): the workspace
 //     moved to another host under a connected window: VS Code resolves again, to the new host's
-//     key, and the terminal is the same shell.
+//     key, and the terminal is the same shell. It fails until spin#1225: the reconnect's start
+//     resumes the workspace where it was, and the move aborts.
 //
 // SPIN_STACK names the spin checkout whose stack is up (test/lane/lane.mjs says what it runs each
 // case in); SPINBOX_REMOTE_VSIX, Spinbox Remote's VSIX (its `task package`, or a release's).
-// CASES=running,stopped,reconnect,unenrolled picks some. `task test:spin-remote` runs it.
-import { spawnSync } from "node:child_process"
-import { appendFileSync } from "node:fs"
-import { resolve } from "node:path"
-import { lane, openCase, root } from "../lane/lane.mjs"
+// CASES=running,stopped,reconnect,unenrolled,reuse picks some. `task test:spin-remote` runs it.
+import { spawn, spawnSync } from "node:child_process"
+import { appendFileSync, existsSync, openSync, readdirSync } from "node:fs"
+import { join, resolve } from "node:path"
+import { lane, logOf, openCase, root } from "../lane/lane.mjs"
 
 const RESOLVER = "spin-stack.spinbox-remote"
 const vsix = process.env.SPINBOX_VSIX ?? resolve(root, "spinbox.vsix")
@@ -117,8 +121,8 @@ async function connects(name, workspace) {
 }
 
 // A connected window has its connection cut by cut(seen), then is asked for another line from its
-// terminal once the resolver has opened the workspace again.
-async function survives(name, workspace, cut) {
+// terminal once the resolver has opened the workspace again, which it claims within backMs.
+async function survives(name, workspace, cut, backMs = RECONNECT_MS) {
   let cutAt
   let askedAt
   const s = await open(name, workspace, {
@@ -136,7 +140,7 @@ async function survives(name, workspace, cut) {
       }
       // Not back in the time the case claims, or back without the terminal answering soon
       // after: failed, and waiting longer would only make it slower to say so.
-      if (askedAt === undefined) return Date.now() - cutAt > RECONNECT_MS
+      if (askedAt === undefined) return Date.now() - cutAt > backMs
       return terminal(s, "again")?.output != null || Date.now() - askedAt > ANSWER_MS
     },
   })
@@ -149,8 +153,8 @@ async function survives(name, workspace, cut) {
     [...resolving(s), ...reopened],
   )
   check(
-    `${name}: the window was back within ${RECONNECT_MS / 1000} s`,
-    askedAt !== undefined && askedAt - cutAt <= RECONNECT_MS,
+    `${name}: the window was back within ${backMs / 1000} s`,
+    askedAt !== undefined && askedAt - cutAt <= backMs,
     `cut at ${cutAt}, opened again at ${askedAt}: ${askedAt - cutAt} ms`,
   )
   check(
@@ -222,20 +226,111 @@ const cases = {
   },
 }
 
-// A move needs a second host (spin's task e2e:hosts:up), so it runs when asked for.
+// The windows VS Code opened in a case: each has a log directory of its own.
+function windowsOf(userData) {
+  const logs = join(userData, "logs")
+  if (!existsSync(logs)) return []
+  return readdirSync(logs).flatMap((session) =>
+    readdirSync(join(logs, session)).filter((d) => d.startsWith("window")),
+  )
+}
+
+// The dashboard's link for a workspace, handed to the VS Code that is running, as the OS hands it.
+function openLink(userData, workspace) {
+  const out = openSync(join(userData, "open-url.log"), "a")
+  spawn(
+    lab.vscode.exe,
+    [
+      "--no-sandbox",
+      "--disable-gpu",
+      `--user-data-dir=${userData}`,
+      `--extensions-dir=${lab.vscode.extensions}`,
+      "--open-url",
+      `vscode://spin-stack.spinbox/open?workspace=${workspace}`,
+    ],
+    { detached: true, stdio: ["ignore", out, out], env: process.env },
+  ).unref()
+}
+
+// How long the reuse case watches for a second window after the link.
+const LINK_MS = 30_000
+
+cases.reuse = async () => {
+  // By its id, as the dashboard's link names it: the window was opened by its name.
+  const id = JSON.parse(asPerson("-o", "json", "workspace", "get", "e2e-running").out).id
+  let sentAt
+  let userData
+  const s = await open("reuse", "e2e-running", {
+    until: (s, files) => {
+      if (!answered(s)) return false
+      if (!connected(s)) return true
+      if (sentAt === undefined) {
+        sentAt = Date.now()
+        userData = files.userData
+        openLink(userData, id)
+      }
+      return windowsOf(userData).length > 1 || Date.now() - sentAt > LINK_MS
+    },
+  })
+  const handled = s.spinbox.filter((l) => l.includes("spin code"))
+  check(
+    "reuse: Spinbox handled the dashboard's link",
+    s.calls.some((l) => l.includes(` end 0 code ${id} `) && Number(l.split(" ")[0]) >= sentAt),
+    [...s.calls.filter((l) => / code /.test(l)), ...handled],
+  )
+  const windows = windowsOf(userData)
+  // VS Code's own word that the folder asked for was the open window's.
+  const reused = logOf(userData, "main.log").filter((l) =>
+    l.includes("doOpenFilesInExistingWindow"),
+  )
+  check(
+    "reuse: the link brought the window already open to e2e-running, and opened no other",
+    windows.length === 1 && reused.length > 0,
+    [...windows, ...reused.map((l) => l.slice(0, 100))],
+  )
+}
+
+// A move needs a second host (spin's task e2e:hosts:up), so it runs when asked for. It pauses the
+// workspace while its memory is stored and its disk published, which takes minutes.
+const MOVE_MS = Number(process.env.MOVE_MS ?? 600_000)
 if (process.env.CASES?.split(",").includes("moved")) {
   cases.moved = async () => {
-    const hostOf = () => JSON.parse(asPerson("-o", "json", "workspace", "get", "e2e-running").out)
+    const hostOf = () =>
+      JSON.parse(asPerson("-o", "json", "workspace", "get", "e2e-running").out).hostId
     const before = hostOf()
-    await survives("moved", "e2e-running", () => {
-      const r = asPerson("workspace", "move", "e2e-running")
-      if (!r.ok) console.log(`       spin workspace move: ${r.err}`)
-    })
+    let moved
+    await survives(
+      "moved",
+      "e2e-running",
+      () => {
+        // Not waited for here: the window is watched while the workspace moves under it.
+        moved = new Promise((done) => {
+          const p = spawn(lab.spin, ["workspace", "move", "e2e-running"], {
+            env: {
+              ...process.env,
+              HOME: lab.person,
+              SSL_CERT_DIR: `/etc/ssl/certs:${lab.person}/.trust`,
+            },
+          })
+          let said = ""
+          p.stdout.on("data", (d) => {
+            said += d
+          })
+          p.stderr.on("data", (d) => {
+            said += d
+          })
+          p.on("close", (code) => done({ code, said: said.trim(), at: Date.now() }))
+        })
+      },
+      MOVE_MS,
+    )
+    const m = await moved
+    check("moved: spin workspace move succeeded", m?.code === 0, m?.said)
     const after = hostOf()
     check(
       "moved: e2e-running runs on another host",
-      before.host_id !== undefined && after.host_id !== before.host_id,
-      `${before.host_id} -> ${after.host_id}`,
+      before !== undefined && after !== undefined && after !== before,
+      `${before} -> ${after}`,
     )
   }
 }

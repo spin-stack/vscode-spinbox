@@ -167,6 +167,9 @@ function spinWrapper(dir, spin) {
   return { wrapper, calls }
 }
 
+// How long VS Code may take to quit when the probe asks it to.
+const QUIT_MS = 15_000
+
 export const SETTINGS = {
   "spinbox.telemetry": false,
   "telemetry.telemetryLevel": "off",
@@ -176,8 +179,11 @@ export const SETTINGS = {
   "workbench.startupEditor": "none",
   "security.workspace.trust.enabled": false,
   // Every case opens the same workspaces, whose server keeps the terminals earlier windows left:
-  // a new window would revive them all, and its own terminal was seen to exit among them.
+  // a new window would revive them all, every earlier case's probe terminal in this one's.
   "terminal.integrated.enablePersistentSessions": false,
+  // VS Code asks once whether an extension may open a vscode:// link, in a modal nobody answers
+  // here: the person who said yes, as they would to the dashboard's first link.
+  "extensions.confirmedUriHandlerExtensionIds": ["spin-stack.spinbox"],
 }
 
 // openCase starts VS Code on folder in a home of the case's own and waits up to waitMs until
@@ -206,6 +212,8 @@ export async function openCase(lane, name, o) {
     probe: join(dir, "probe.jsonl"),
     dismiss: join(dir, "dismiss"),
     again: join(dir, "again"),
+    quit: join(dir, "quit"),
+    userData,
   }
   const started = Date.now()
   const home = homedir()
@@ -249,6 +257,7 @@ export async function openCase(lane, name, o) {
         SPINBOX_PROBE_OUT: files.probe,
         SPINBOX_PROBE_DISMISS: files.dismiss,
         SPINBOX_PROBE_AGAIN: files.again,
+        SPINBOX_PROBE_QUIT: files.quit,
       },
     },
   )
@@ -277,10 +286,20 @@ export async function openCase(lane, name, o) {
     s = seen()
   }
   say(`${name}: ${why}`)
-  try {
-    process.kill(-code.pid, "SIGTERM")
-  } catch {}
-  await sleep(2_000)
+  // Quit as a person does, so VS Code tells the workspace's server the window is gone and its
+  // extension host ends: killed, the server keeps it for the reconnection's grace, three hours,
+  // and a few cases filled the workspace's memory until it could start no process.
+  if (!why.startsWith("VS Code exited")) {
+    writeFileSync(files.quit, "")
+    const quit = await Promise.race([exited, sleep(QUIT_MS).then(() => undefined)])
+    if (quit === undefined) {
+      say(`${name}: VS Code did not quit within ${QUIT_MS / 1000} s; ended`)
+      try {
+        process.kill(-code.pid, "SIGTERM")
+      } catch {}
+      await sleep(2_000)
+    }
+  }
   return seen()
 }
 

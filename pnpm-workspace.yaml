@@ -10,3 +10,9 @@ allowBuilds:
   # Its postinstall picks the platform's vsce-sign binary, which signs a package for the
   # Marketplace: vsce package runs without it, and nothing here signs yet.
   '@vscode/vsce-sign': false
+
+overrides:
+  # vsce 4.1 asks for minimatch ^10.2.6, and every 10.x is in GHSA-g3hv-75wg-m249 (globParts
+  # amplification), fixed from 11.0.1. vsce reads only .vscodeignore's own patterns with it, and
+  # the VSIX it packages with 11 holds the same files.
+  minimatch: ^11.0.8

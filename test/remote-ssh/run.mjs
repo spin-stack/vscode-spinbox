@@ -19,38 +19,11 @@
 // ssh finds ~/.ssh from the password database and not from HOME, so neither spin code's ssh config
 // nor the stack's session ever touches the real one. CASES=running,stopped,unenrolled picks some.
 // Needs bwrap, ssh-keygen and a display: `task test:remote-ssh` runs it under xvfb-run.
-import { spawn, spawnSync } from "node:child_process"
-import {
-  appendFileSync,
-  chmodSync,
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs"
-import { homedir, tmpdir } from "node:os"
-import { dirname, join, resolve } from "node:path"
-import { fileURLToPath } from "node:url"
-import {
-  downloadAndUnzipVSCode,
-  resolveCliArgsFromVSCodeExecutablePath,
-} from "@vscode/test-electron"
+import { appendFileSync, existsSync } from "node:fs"
+import { resolve } from "node:path"
+import { lane, openCase, root, timeOf } from "../lane/lane.mjs"
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
-const stack = process.env.SPIN_STACK
-if (!stack) {
-  console.error("SPIN_STACK: the spin checkout whose e2e stack is up")
-  process.exit(2)
-}
-const spin = resolve(stack, "bin/spin")
-const person = resolve(stack, "_output/run/e2e/people/user")
-const home = homedir()
-const work = mkdtempSync(join(tmpdir(), "spinbox-remote-ssh-"))
 const vsix = process.env.SPINBOX_VSIX ?? resolve(root, "spinbox.vsix")
-const only = process.env.CASES?.split(",")
 const WAIT_MS = 360_000
 // How long the unenrolled case leaves Spinbox's message up before closing it.
 const READ_MS = Number(process.env.READ_MS ?? 30_000)
@@ -60,202 +33,22 @@ const QUICK_MS = 5_000
 // the unload - 10 s on a host at load 22. Waiting out the ConnectTimeout alone took 17 s.
 const LEAVE_MS = 15_000
 
-const say = (line) => console.log(`==> ${line}`)
-
 // VS Code stable, as Marketplace users have it, with Remote-SSH from the Marketplace beside the
 // VSIX: neither is a development copy.
-const exe = await downloadAndUnzipVSCode({
-  version: "stable",
-  cachePath: resolve(root, ".vscode-test"),
-})
-const [cli] = resolveCliArgsFromVSCodeExecutablePath(exe)
-const version = spawnSync(cli, ["--version"], { encoding: "utf8" }).stdout.split("\n")
-const extensions = join(work, "extensions")
-const installed = spawnSync(
-  cli,
-  [
-    `--extensions-dir=${extensions}`,
-    `--user-data-dir=${join(work, "install")}`,
-    "--install-extension",
-    "ms-vscode-remote.remote-ssh",
-    "--install-extension",
-    vsix,
-  ],
-  { encoding: "utf8" },
-)
-if (installed.status !== 0) throw new Error(`installing the extensions: ${installed.stderr}`)
-const listed = readdirSync(extensions).filter((d) => d.includes("."))
-say(`VS Code ${version[0]} (${version[1]}), ${listed.join(", ")}`)
+const lab = await lane("spinbox-remote-ssh-", ["ms-vscode-remote.remote-ssh", vsix])
+const { check } = lab
+const stateOf = lab.cli.stateOf
+const asPerson = lab.cli.run
 
-// The person's home for one case: their session and the stack's root, and their enrolled key, or
-// a key of nobody's.
-const KEPT = [
-  ".spin/config.yaml",
-  ".trust/stack-root.pem",
-  ".ssh/id_ed25519",
-  ".ssh/id_ed25519.pub",
-]
-
-function homeFor(dir, enrolled) {
-  for (const f of KEPT) {
-    mkdirSync(dirname(join(dir, f)), { recursive: true, mode: 0o700 })
-    if (enrolled || !f.startsWith(".ssh/")) copyFileSync(join(person, f), join(dir, f))
-  }
-  if (!enrolled) {
-    const key = join(dir, ".ssh/id_ed25519")
-    const r = spawnSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", key])
-    if (r.status !== 0) throw new Error("ssh-keygen failed")
-  }
-}
-
-const trust = `/etc/ssl/certs:${join(home, ".trust")}`
-
-// The CLI as the person, outside VS Code, for what the stack says of a workspace.
-function asPerson(...args) {
-  const r = spawnSync(spin, args, {
-    encoding: "utf8",
-    env: { ...process.env, HOME: person, SSL_CERT_DIR: `/etc/ssl/certs:${join(person, ".trust")}` },
+function open(name, workspace, { enrolled, until }) {
+  return openCase(lab, name, {
+    enrolled,
+    until,
+    waitMs: WAIT_MS,
+    folder: `vscode-remote://ssh-remote+spin.${workspace}/workspace`,
+    settings: (wrapper) => ({ "spinbox.cliPath": wrapper }),
+    logs: { spinbox: "Spinbox.log", remoteSSH: "Remote - SSH.log" },
   })
-  return { ok: r.status === 0, out: r.stdout.trim(), err: r.stderr.trim() }
-}
-
-function stateOf(name) {
-  const r = asPerson("-o", "json", "workspace", "list")
-  if (!r.ok) throw new Error(`listing workspaces: ${r.err}`)
-  return JSON.parse(r.out).items.find((w) => w.name === name)?.state
-}
-
-const lines = (body) => body.split("\n").filter((l) => l !== "")
-
-// Every line VS Code's logs hold in the files whose names end with suffix.
-function logOf(userData, suffix) {
-  const found = []
-  const walk = (dir) => {
-    for (const e of readdirSync(dir, { withFileTypes: true })) {
-      const p = join(dir, e.name)
-      if (e.isDirectory()) walk(p)
-      else if (e.name.endsWith(suffix)) found.push(...lines(readFileSync(p, "utf8")))
-    }
-  }
-  if (existsSync(join(userData, "logs"))) walk(join(userData, "logs"))
-  return found
-}
-
-const read = (path) => (existsSync(path) ? lines(readFileSync(path, "utf8")) : [])
-
-// [hh:mm:ss.mmm] at the start of a Remote-SSH line, as epoch ms of the day it ran.
-function timeOf(line, day) {
-  const m = /^\[(\d{2}):(\d{2}):(\d{2})\.(\d{3})\]/.exec(line)
-  if (m === null) return undefined
-  const d = new Date(day)
-  d.setHours(Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4]))
-  return d.getTime()
-}
-
-async function openCase(name, workspace, { enrolled, until }) {
-  const dir = join(work, name)
-  const caseHome = join(dir, "home")
-  const userData = join(dir, "user-data")
-  homeFor(caseHome, enrolled)
-  // An empty system ssh config: in bubblewrap's namespace root's files are nobody's, which ssh
-  // refuses to read.
-  writeFileSync(join(dir, "ssh_config"), "")
-  // Each spin the extension runs, said with when it started and ended, around the real one. The
-  // time is bash's own clock read, in ms: uutils' `date +%s%3N` mixed one instant's seconds with
-  // another's milliseconds on a loaded host, and wrote an end before its start.
-  const calls = join(dir, "spin-calls.log")
-  const wrapper = join(dir, "spin")
-  const stamp = (what) => `t=\${EPOCHREALTIME/./}; echo "\${t%???} ${what} $*" >> ${calls}`
-  writeFileSync(
-    wrapper,
-    `#!/bin/bash\n${stamp("start")}\n${spin} "$@"\nrc=$?\n${stamp("end $rc")}\nexit $rc\n`,
-  )
-  chmodSync(wrapper, 0o755)
-  mkdirSync(join(userData, "User"), { recursive: true })
-  writeFileSync(
-    join(userData, "User/settings.json"),
-    JSON.stringify({
-      "spinbox.cliPath": wrapper,
-      "spinbox.telemetry": false,
-      "telemetry.telemetryLevel": "off",
-      "update.mode": "none",
-      "extensions.autoUpdate": false,
-      "extensions.autoCheckUpdates": false,
-      "workbench.startupEditor": "none",
-      "security.workspace.trust.enabled": false,
-    }),
-  )
-  const probeOut = join(dir, "probe.jsonl")
-  const dismiss = join(dir, "dismiss")
-  const folder = `vscode-remote://ssh-remote+spin.${workspace}/workspace`
-  const started = Date.now()
-  const bwrap = [
-    ["--die-with-parent"],
-    ["--dev-bind", "/", "/"],
-    ["--bind", caseHome, home],
-    ["--bind", root, root],
-    ["--bind", resolve(stack), resolve(stack)],
-    ["--tmpfs", "/tmp"],
-    ["--bind", "/tmp/.X11-unix", "/tmp/.X11-unix"],
-    ["--ro-bind", join(dir, "ssh_config"), "/etc/ssh/ssh_config"],
-    ["--tmpfs", "/etc/ssh/ssh_config.d"],
-    process.env.XAUTHORITY ? ["--bind", process.env.XAUTHORITY, process.env.XAUTHORITY] : [],
-  ].flat()
-  const code = spawn(
-    "bwrap",
-    [
-      ...bwrap,
-      exe,
-      "--no-sandbox",
-      "--disable-gpu",
-      `--user-data-dir=${userData}`,
-      `--extensions-dir=${extensions}`,
-      `--extensionDevelopmentPath=${join(root, "test/remote-ssh/testdata/probe")}`,
-      `--folder-uri=${folder}`,
-      "--log=trace",
-      "--skip-welcome",
-      "--skip-release-notes",
-      "--disable-workspace-trust",
-      "--new-window",
-    ],
-    {
-      detached: true,
-      stdio: "ignore",
-      env: {
-        ...process.env,
-        SSL_CERT_DIR: trust,
-        SPINBOX_PROBE_OUT: probeOut,
-        SPINBOX_PROBE_DISMISS: dismiss,
-      },
-    },
-  )
-  const seen = () => ({
-    started,
-    probe: read(probeOut).map((l) => JSON.parse(l)),
-    calls: read(calls),
-    spinbox: logOf(userData, "Spinbox.log"),
-    remoteSSH: logOf(userData, "Remote - SSH.log"),
-    exthost: logOf(userData, "exthost.log"),
-    renderer: logOf(userData, "renderer.log"),
-  })
-  let s = seen()
-  const end = Date.now() + WAIT_MS
-  while (Date.now() < end && !until(s, dismiss)) {
-    await new Promise((r) => setTimeout(r, 1_000))
-    s = seen()
-  }
-  try {
-    process.kill(-code.pid, "SIGTERM")
-  } catch {}
-  await new Promise((r) => setTimeout(r, 2_000))
-  return seen()
-}
-
-const failures = []
-function check(name, ok, evidence) {
-  say(`${ok ? "ok  " : "FAIL"} ${name}`)
-  for (const line of [evidence].flat().filter((l) => l !== undefined)) console.log(`       ${line}`)
-  if (!ok) failures.push(name)
 }
 
 // Spinbox's activation by the resolution, the `spin code <workspace>` it ran and when that ended,
@@ -288,7 +81,7 @@ const errorsOf = (s) => s.remoteSSH.filter((l) => !l.includes("[server]") && GAV
 const connected = (s) => s.probe.some((e) => e.event === "terminal")
 
 async function connects(name, workspace) {
-  const s = await openCase(name, workspace, { enrolled: true, until: connected })
+  const s = await open(name, workspace, { enrolled: true, until: connected })
   const o = ordering(s, workspace)
   check(
     `${name}: Spinbox ran spin code --start before Remote-SSH resolved`,
@@ -326,9 +119,9 @@ const cases = {
   },
   unenrolled: async () => {
     let refusedAt
-    const s = await openCase("unenrolled", "e2e-running", {
+    const s = await open("unenrolled", "e2e-running", {
       enrolled: false,
-      until: (s, dismiss) => {
+      until: (s, { dismiss }) => {
         if (refusedAt === undefined && s.spinbox.some((l) => l.includes("[key_not_enrolled]"))) {
           refusedAt = Date.now()
         }
@@ -394,11 +187,4 @@ const cases = {
   },
 }
 
-for (const [name, run] of Object.entries(cases)) {
-  if (only === undefined || only.includes(name)) await run()
-}
-say(`logs in ${work}`)
-if (failures.length > 0) {
-  console.error(`${failures.length} failed: ${failures.join("; ")}`)
-  process.exit(1)
-}
+await lab.run(cases)

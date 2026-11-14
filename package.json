@@ -210,7 +210,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --coverage",
     "test:cli": "vitest run --config vitest.cli.config.mts",
     "test:integration": "node esbuild.mjs --tests && node test/integration/run.mjs",
     "package": "vsce package --no-dependencies --out spinbox.vsix"
@@ -219,6 +219,7 @@
     "@biomejs/biome": "2.6.3",
     "@types/node": "22.20.5",
     "@types/vscode": "1.146.0",
+    "@vitest/coverage-v8": "5.0.5",
     "@vscode/test-electron": "3.1.0",
     "@vscode/vsce": "4.1.0",
     "esbuild": "0.28.2",

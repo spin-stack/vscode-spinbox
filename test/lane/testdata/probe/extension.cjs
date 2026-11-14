@@ -8,6 +8,8 @@
 //     read back over the remote's file system;
 //   - again: the same terminal asked for another command, when the lane creates
 //     SPINBOX_PROBE_AGAIN - after a reconnect, whether the terminal outlived it;
+//   - quit: VS Code quits when the lane creates SPINBOX_PROBE_QUIT, as a person quits it, so the
+//     workspace's server is told each window went;
 //   - dismissed: the notifications closed when the lane asked, by creating SPINBOX_PROBE_DISMISS,
 //     as a person closes one: a notification nobody answers holds its caller forever.
 const fs = require("node:fs")
@@ -16,6 +18,7 @@ const vscode = require("vscode")
 const out = process.env.SPINBOX_PROBE_OUT
 const dismiss = process.env.SPINBOX_PROBE_DISMISS
 const again = process.env.SPINBOX_PROBE_AGAIN
+const quit = process.env.SPINBOX_PROBE_QUIT
 const REMOTES = ["ssh-remote", "spin"]
 
 function say(event, fields = {}) {
@@ -30,6 +33,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 exports.activate = () => {
   const folder = vscode.workspace.workspaceFolders?.[0]?.uri
   say("activate", { remoteName: vscode.env.remoteName ?? null, folder: folder?.toString() ?? null })
+  if (quit) void whenAsked(quit, () => vscode.commands.executeCommand("workbench.action.quit"))
   if (dismiss)
     void whenAsked(dismiss, async () => {
       await vscode.commands.executeCommand("notifications.clearAll")

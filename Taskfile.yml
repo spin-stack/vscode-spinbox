@@ -78,11 +78,12 @@ tasks:
       The packaged VSIX and Spinbox Remote in a real VS Code stable, its proposed API enabled by
       argv.json, opening the workspaces of a spin e2e stack as vscode-remote://spin+<workspace>
       (test/spin-remote/run.mjs): running, stopped, a connection cut under the window and back
-      with the same terminal, and a refused key said once. Needs the stack - SPIN_STACK=<spin
+      with the same terminal, a refused key said once, and the dashboard's link bringing the window
+      already open. Needs the stack - SPIN_STACK=<spin
       checkout> after its `task e2e:up` and `task e2e:workspaces` - bwrap, and
       SPINBOX_REMOTE_VSIX=<open-remote-ssh's spinbox-remote.vsix>, so no workflow runs it. CASES=moved
-      adds a move to another host, after spin's `task e2e:hosts:up`. Under xvfb-run when it is
-      installed.
+      adds a move to another host, after spin's `task e2e:hosts:up`; it fails until spin#1225.
+      Under xvfb-run when it is installed.
     vars:
       XVFB:
         sh: command -v xvfb-run || true

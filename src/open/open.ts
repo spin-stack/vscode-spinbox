@@ -1,4 +1,4 @@
-import type { SpinCli } from "../cli/client"
+import { confirmingKeyMessage, type SpinCli } from "../cli/client"
 import type { Workspace } from "../cli/contract"
 import { SPIN_RESOLVER, spinFolderUri } from "../status/authority"
 import type { Trace } from "../telemetry"
@@ -76,6 +76,7 @@ async function open(
             vscodeVersion: deps.vscodeVersion,
             signal,
             traceparent,
+            onConfirmingKey: (c) => report(confirmingKeyMessage(c)),
             onPreparing: (p) =>
               report(
                 `Preparing VS Code ${p.vscode_version} for this installation (once): ${p.step}`,

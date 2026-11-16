@@ -269,6 +269,37 @@ describe("ProcessSpinCli kills a hung spin", () => {
     expect(heard).toEqual(["downloading", "building"])
   }, 10_000)
 
+  // A first connection from this computer waits for the person's passkey to add its key: that
+  // moves code's deadline, is heard as it comes, and is not the answer.
+  it("not while this computer's key waits for a passkey and says so", async () => {
+    const confirming = {
+      url: "https://app.example/settings/keys?add=k",
+      fingerprint: "SHA256:x",
+      name: "laptop",
+    }
+    scenario({
+      code: {
+        lineDelayMs: 1000,
+        stdout: [
+          { confirming_key: confirming },
+          {
+            workspace_id: "ws-1",
+            host: "spin.my-ws",
+            folder_uri: "vscode-remote://x",
+            server: "carried",
+          },
+        ],
+      },
+    })
+    const heard: unknown[] = []
+    await expect(
+      cli({ code: 1500 }).cli.code("my-ws", undefined, "a".repeat(40), {
+        onConfirmingKey: (c) => heard.push(c),
+      }),
+    ).resolves.toMatchObject({ server: "carried" })
+    expect(heard).toEqual([confirming])
+  }, 10_000)
+
   it("not while login waits within the code's lifetime", async () => {
     vi.stubEnv("FAKE_SPIN_LOGIN_DELAY_MS", "3000")
     await expect(cli({ login: 1500 }).cli.login(() => {})).resolves.toMatchObject({

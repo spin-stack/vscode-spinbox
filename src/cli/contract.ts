@@ -119,6 +119,25 @@ export interface CodeResult {
   not_given?: string
 }
 
+// The line spin code writes while this computer's key waits to be added to the person's account:
+// the page it opened, where their passkey confirms it. A first connection from a computer - VS
+// Code's, before anyone ran spin there - waits on this, not on an error.
+export interface CodeConfirmingKey {
+  confirming_key: {
+    url: string
+    fingerprint: string
+    name: string
+  }
+}
+
+export function isCodeConfirmingKey(v: unknown): v is CodeConfirmingKey {
+  if (typeof v !== "object" || v === null || !("confirming_key" in v)) {
+    return false
+  }
+  const c = (v as { confirming_key: unknown }).confirming_key
+  return typeof c === "object" && c !== null && typeof (c as { url?: unknown }).url === "string"
+}
+
 export function isCodePreparing(v: unknown): v is CodePreparing {
   if (typeof v !== "object" || v === null || !("preparing" in v)) {
     return false

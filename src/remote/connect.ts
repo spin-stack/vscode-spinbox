@@ -1,4 +1,4 @@
-import type { SpinCli } from "../cli/client"
+import { confirmingKeyMessage, type SpinCli } from "../cli/client"
 import { parseSpinRemote } from "../status/authority"
 import type { Trace } from "../telemetry"
 
@@ -61,6 +61,7 @@ export async function prepareConnection(
           vscodeVersion: deps.vscodeVersion,
           signal,
           traceparent,
+          onConfirmingKey: (c) => report(confirmingKeyMessage(c)),
           onPreparing: (p) =>
             report(`Preparing VS Code ${p.vscode_version} for this installation (once): ${p.step}`),
         })

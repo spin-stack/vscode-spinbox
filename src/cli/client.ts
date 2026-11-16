@@ -1,10 +1,12 @@
 import { spawn } from "node:child_process"
 import { SpinNotFoundError } from "./binary"
 import {
+  type CodeConfirmingKey,
   type CodePreparing,
   type CodeResult,
   type ErrorCode,
   type ErrorEnvelope,
+  isCodeConfirmingKey,
   isCodePreparing,
   isErrorEnvelope,
   type LoginDone,
@@ -59,6 +61,8 @@ export interface CodeOptions extends RunOptions {
   start?: boolean
   // Hears each step of a server the installation prepares for this VS Code, as it begins.
   onPreparing?: (preparing: CodePreparing["preparing"]) => void
+  // Hears that this computer's key waits for the person's passkey, on the page spin opened.
+  onConfirmingKey?: (confirming: CodeConfirmingKey["confirming_key"]) => void
 }
 
 // CliError is a command's failure as the CLI reported it: the envelope it wrote on stdout.
@@ -107,6 +111,8 @@ const LOGIN_GRACE_MS = 30_000
 // After a step of a server being prepared, how long code may run on: past the CLI's own wait for
 // the publish (6 minutes) and the host's attach that follows it (3).
 const PREPARING_GRACE_MS = 10 * 60_000
+// spin waits ten minutes for a passkey (cmd/cli/cmd/owner.go stepUpWithin), and a little past it.
+const CONFIRMING_KEY_GRACE_MS = 11 * 60_000
 // Between SIGTERM and SIGKILL, for a CLI that does not stop when asked.
 const KILL_GRACE_MS = 3_000
 // After spin exits, how long its stdout and stderr may stay open: a child it left running that
@@ -207,9 +213,13 @@ export class ProcessSpinCli implements SpinCli {
       if (isCodePreparing(p)) {
         extend(PREPARING_GRACE_MS)
         opts.onPreparing?.(p.preparing)
+      } else if (isCodeConfirmingKey(p)) {
+        // As long as spin waits for the person's passkey: its own wait ends sooner.
+        extend(CONFIRMING_KEY_GRACE_MS)
+        opts.onConfirmingKey?.(p.confirming_key)
       }
     })
-    const [only, ...rest] = r.docs.filter((v) => !isCodePreparing(v))
+    const [only, ...rest] = r.docs.filter((v) => !isCodePreparing(v) && !isCodeConfirmingKey(v))
     if (r.exit === 0 && isObject(only) && !("error" in only) && rest.length === 0) {
       return only as unknown as CodeResult
     }
@@ -409,4 +419,9 @@ function isLoginStart(v: unknown): v is LoginStart {
     typeof v.user_code === "string" &&
     typeof v.expires_in === "number"
   )
+}
+
+// What a person is told while spin waits for their passkey to add this computer's key.
+export function confirmingKeyMessage(c: CodeConfirmingKey["confirming_key"]): string {
+  return `Confirm with your passkey, in the browser page spin opened, that ${c.name} connects to your workspaces`
 }

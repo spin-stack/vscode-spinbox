@@ -17,10 +17,9 @@
 //   - reuse: the dashboard's link for the workspace open in the window, by its id, handed to the
 //     running VS Code: Spinbox opens it, and VS Code brings that window rather than another
 //     (spin#1119: the dashboard learns nothing back, so the window has to be found here);
-//   - moved (only when CASES names it, with spin's `task e2e:hosts:up` run first): the workspace
-//     moved to another host under a connected window: VS Code resolves again, to the new host's
-//     key, and the terminal is the same shell. It fails until spin#1225: the reconnect's start
-//     resumes the workspace where it was, and the move aborts.
+//   - moved (only when CASES names it, with spin's `task e2e:hosts:up` run first): a workspace
+//     moved from one guest host to the other under a connected window: VS Code resolves again,
+//     to the new host's key, and the terminal is the same shell.
 //
 // SPIN_STACK names the spin checkout whose stack is up (test/lane/lane.mjs says what it runs each
 // case in); SPINBOX_REMOTE_VSIX, Spinbox Remote's VSIX (its `task package`, or a release's).
@@ -28,7 +27,7 @@
 import { spawn, spawnSync } from "node:child_process"
 import { appendFileSync, existsSync, openSync, readdirSync } from "node:fs"
 import { join, resolve } from "node:path"
-import { lane, logOf, openCase, root } from "../lane/lane.mjs"
+import { lane, logOf, openCase, personCli, root } from "../lane/lane.mjs"
 
 const RESOLVER = "spin-stack.spinbox-remote"
 const vsix = process.env.SPINBOX_VSIX ?? resolve(root, "spinbox.vsix")
@@ -290,48 +289,78 @@ cases.reuse = async () => {
   )
 }
 
-// A move needs a second host (spin's task e2e:hosts:up), so it runs when asked for. It pauses the
-// workspace while its memory is stored and its disk published, which takes minutes.
+// A move needs the guest hosts spin's `task e2e:hosts:up` boots, so it runs when asked for. A
+// workspace's memory resumes only on a host of the processor it was taken on (spin's machine
+// identity), and the lane's own host is this machine while the guests are QEMU's, so the move is
+// from one guest to the other, as spin's own hosts lane moves one: e2e-moved is made on guest a,
+// with every other host drained, and moved with all of them active, which leaves guest b. It
+// pauses the workspace while its memory is stored and its disk published, which takes minutes.
 const MOVE_MS = Number(process.env.MOVE_MS ?? 600_000)
+// The ids hack/e2ehosts gives the guests.
+const GUEST_A = "e2e00000-0000-7000-8000-000000002003"
+const GUEST_B = "e2e00000-0000-7000-8000-000000002004"
 if (process.env.CASES?.split(",").includes("moved")) {
   cases.moved = async () => {
+    const admin = personCli(lab.spin, resolve(lab.stack, "_output/run/e2e/people/admin")).run
+    const must = (r, what) => {
+      if (!r.ok) throw new Error(`${what}: ${r.err || r.out}`)
+      return r.out
+    }
+    const hosts = JSON.parse(
+      must(admin("-o", "json", "admin", "runner", "list"), "listing hosts"),
+    ).items.map((h) => h.id)
+    const activateAll = () => {
+      for (const h of hosts) admin("admin", "runner", "activate", h)
+    }
     const hostOf = () =>
-      JSON.parse(asPerson("-o", "json", "workspace", "get", "e2e-running").out).hostId
-    const before = hostOf()
-    let moved
-    await survives(
-      "moved",
-      "e2e-running",
-      () => {
-        // Not waited for here: the window is watched while the workspace moves under it.
-        moved = new Promise((done) => {
-          const p = spawn(lab.spin, ["workspace", "move", "e2e-running"], {
-            env: {
-              ...process.env,
-              HOME: lab.person,
-              SSL_CERT_DIR: `/etc/ssl/certs:${lab.person}/.trust`,
-            },
+      JSON.parse(asPerson("-o", "json", "workspace", "get", "e2e-moved").out).hostId
+    try {
+      for (const h of hosts) {
+        if (h !== GUEST_A) must(admin("admin", "runner", "drain", h), `draining ${h}`)
+      }
+      must(admin("admin", "runner", "activate", GUEST_A), "activating guest a")
+      must(
+        asPerson("workspace", "create", "--name", "e2e-moved", "--wait", "--timeout", "5m"),
+        "creating e2e-moved",
+      )
+      activateAll()
+      const before = hostOf()
+      check("moved: e2e-moved runs on guest a", before === GUEST_A, before)
+      let moved
+      await survives(
+        "moved",
+        "e2e-moved",
+        () => {
+          // Not waited for here: the window is watched while the workspace moves under it.
+          moved = new Promise((done) => {
+            const p = spawn(lab.spin, ["workspace", "move", "e2e-moved"], {
+              env: {
+                ...process.env,
+                HOME: lab.person,
+                SSL_CERT_DIR: `/etc/ssl/certs:${lab.person}/.trust`,
+              },
+            })
+            let said = ""
+            p.stdout.on("data", (d) => {
+              said += d
+            })
+            p.stderr.on("data", (d) => {
+              said += d
+            })
+            p.on("close", (code) => done({ code, said: said.trim(), at: Date.now() }))
           })
-          let said = ""
-          p.stdout.on("data", (d) => {
-            said += d
-          })
-          p.stderr.on("data", (d) => {
-            said += d
-          })
-          p.on("close", (code) => done({ code, said: said.trim(), at: Date.now() }))
-        })
-      },
-      MOVE_MS,
-    )
-    const m = await moved
-    check("moved: spin workspace move succeeded", m?.code === 0, m?.said)
-    const after = hostOf()
-    check(
-      "moved: e2e-running runs on another host",
-      before !== undefined && after !== undefined && after !== before,
-      `${before} -> ${after}`,
-    )
+        },
+        MOVE_MS,
+      )
+      const m = await moved
+      check("moved: spin workspace move succeeded", m?.code === 0, m?.said)
+      const after = hostOf()
+      check("moved: e2e-moved runs on guest b", after === GUEST_B, `${before} -> ${after}`)
+    } finally {
+      activateAll()
+      asPerson("workspace", "stop", "e2e-moved", "--wait", "--timeout", "3m")
+      asPerson("workspace", "delete", "e2e-moved", "--yes", "--permanently")
+    }
   }
 }
 

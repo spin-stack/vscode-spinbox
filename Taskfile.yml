@@ -82,7 +82,7 @@ tasks:
       already open. Needs the stack - SPIN_STACK=<spin
       checkout> after its `task e2e:up` and `task e2e:workspaces` - bwrap, and
       SPINBOX_REMOTE_VSIX=<open-remote-ssh's spinbox-remote.vsix>, so no workflow runs it. CASES=moved
-      adds a move to another host, after spin's `task e2e:hosts:up`; it fails until spin#1225.
+      adds a move from one guest host to the other, after spin's `task e2e:hosts:up`.
       Under xvfb-run when it is installed.
     vars:
       XVFB:

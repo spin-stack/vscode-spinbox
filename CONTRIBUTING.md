@@ -24,9 +24,9 @@ environment variables or a scenario file: its header says how.
 
 Every VSIX carries the spin CLI of one spin release, the one `versions.yaml` pins as `spin`, and a
 CLI speaks only to an installation of its own release; so the extension follows each spin release.
-[spin-stack/shipset](https://github.com/spin-stack/shipset) dispatches
+[spin-stack/ship-it](https://github.com/spin-stack/ship-it) dispatches
 `.github/workflows/bump-spin.yml` with each spin release newer than the pin (input `release`; the
-run is named `spin <release>`, which is how shipset finds it again). The run:
+run is named `spin <release>`, which is how ship-it finds it again). The run:
 
 1. stops, successfully, when the release is not newer than the pin (`task spin:newer`);
 2. bumps the pin (`task spin:bump`, go-tools' `versions bump spin <release>`), reading the tag's

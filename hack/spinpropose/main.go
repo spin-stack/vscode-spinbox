@@ -6,7 +6,7 @@
 //	GH_TOKEN=<the app's> go run ./hack/spinpropose -release v20261106.01 -app spin-stack-release
 //
 // As the app so CI and Package run on the pull request, which one opened with a workflow's own
-// token would not start, and so spin-stack/shipset, which waits only on what the app proposed,
+// token would not start, and so spin-stack/ship-it, which waits only on what the app proposed,
 // sees it. One branch, rewritten by each run: what waits there is always the newest release.
 //
 // package.json's version moves to the next patch when the one main holds is already tagged, so
@@ -178,6 +178,6 @@ func body(release, run, version, tag string, targets []string) string {
 		"and the extension tried against an installation of " + release + ".\n\n" +
 		"Merging it releases the extension as " + version + ": `.github/workflows/tag.yml` tags main `" + tag + "`, " +
 		"and that tag publishes it to the GitHub release, ghcr and the Marketplace.\n\n" +
-		"spin-stack/shipset dispatches this for each spin release (`.github/workflows/bump-spin.yml`); " +
+		"spin-stack/ship-it dispatches this for each spin release (`.github/workflows/bump-spin.yml`); " +
 		"a newer one rewrites this branch and this pull request, commits added here included.\n"
 }

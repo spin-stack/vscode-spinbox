@@ -8,9 +8,9 @@ name: Bump spin
 # package.json to the next patch too, so a person reads it and merges it, and tag.yml tags the
 # merge, which publishes.
 #
-# spin-stack/shipset dispatches this with each spin release newer than the pin, and finds the run
-# again by its name. As the release app (spin-stack-release), as shipset's other hops propose: a
-# pull request opened with this run's own token would start none of CI and Package, and shipset
+# spin-stack/ship-it dispatches this with each spin release newer than the pin, and finds the run
+# again by its name. As the release app (spin-stack-release), as ship-it's other hops propose: a
+# pull request opened with this run's own token would start none of CI and Package, and ship-it
 # waits only on one the app opened. Two tokens, each for one thing: spin is private, and the bump
 # reads its tag's commit over git; the pull request is written here.
 run-name: spin ${{ inputs.release }}

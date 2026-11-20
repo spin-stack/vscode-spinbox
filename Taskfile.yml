@@ -248,6 +248,23 @@ tasks:
     cmds:
       - go run ./hack/releasetag
 
+  # spin-stack/ship-it merges the Bump spin workflow's pull request once its checks pass. GitHub's
+  # schedule does not wake it (a */5 cron ran 3 of 576 in 48 h), so the end of those checks does. A
+  # hint: ship-it reads the state itself, and its hourly cron catches a wake that was lost.
+  ship-it:wake:
+    desc: Wake spin-stack/ship-it with this run and its CONCLUSION, as GH_TOKEN (the release app's on ship-it) - the Wake ship-it workflow's last step, after CI or Package on spin/next.
+    requires:
+      vars: [CONCLUSION]
+    cmds:
+      - |
+        set -euo pipefail
+        workflow=${GITHUB_WORKFLOW_REF%@*}
+        gh api repos/spin-stack/ship-it/dispatches -f event_type=wake \
+          -f "client_payload[repository]=${GITHUB_REPOSITORY}" \
+          -f "client_payload[workflow]=${workflow##*/}" \
+          -f "client_payload[run]=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+          -f "client_payload[conclusion]=${CONCLUSION}"
+
   gate:
     desc: What holds the repository's shape - every install through the firewall, every workflow step a task, and no commit since origin/main by a test's identity.
     cmds:

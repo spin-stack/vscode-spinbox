@@ -1,0 +1,51 @@
+name: Wake ship-it
+
+# spin-stack/ship-it merges the Bump spin workflow's pull request on spin/next once every check on
+# its head has passed, and nothing else tells it when that is: this wakes it each time CI or
+# Package finishes there, whatever it concluded. Each, because either can be the last, and a wake
+# that finds a check still running is a no-op. A workflow of its own, and not a last job in ci.yml:
+# ship-it waits until every check on the head is done, and such a job would be one of them, still
+# running while ship-it reads them. A workflow_run's checks are on main's head.
+on:
+  workflow_run:
+    workflows: [CI, Package]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  wake:
+    name: Wake ship-it
+    # Never a fork's: ship-it merges only what the release app proposed from here, and a fork's
+    # branch is named by anyone.
+    if: github.event.workflow_run.head_branch == 'spin/next' && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # main's Taskfile, never the pull request's: this run holds the release app's key.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      # A wake is a hint: one lost is caught by ship-it's hourly cron, so it never fails the run.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        if: always()
+        id: wake
+        continue-on-error: true
+        with:
+          client-id: Iv23licJKNgsPIM00SD0 # spin-stack-release's client ID, public: app-id is deprecated
+          private-key: ${{ secrets.RELEASE_APP_KEY }}
+          owner: spin-stack
+          repositories: ship-it
+          permission-contents: write
+      - name: Wake ship-it
+        if: always() && steps.wake.outputs.token != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.wake.outputs.token }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: go tool task ship-it:wake

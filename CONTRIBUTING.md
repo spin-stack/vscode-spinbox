@@ -45,8 +45,10 @@ One branch, rewritten by each run: what waits there is always the newest release
 replaces commits added to it. The pull request is opened by the app, not by the run's own token, so
 CI and Package run on it. Merging it, after checking the CLI's contract against
 `src/cli/contract.ts` and trying the extension against an installation of that release, is a
-person's, and it releases the extension: `.github/workflows/tag.yml` tags the merge (below). The
-run needs the app's key as the secret `RELEASE_APP_KEY`.
+person's, and it releases the extension: `.github/workflows/tag.yml` tags the merge (below). With
+ship-it's auto-merge on, ship-it merges it instead once every check passed, and
+`.github/workflows/wake.yml` (`task ship-it:wake`) wakes ship-it each time CI or Package finishes on
+`spin/next`. Both runs need the app's key as the secret `RELEASE_APP_KEY`.
 
 To bump by hand, `go tool task spin:bump RELEASE=<release>`, `go tool task contract:spin` and
 `go tool task package:all`.

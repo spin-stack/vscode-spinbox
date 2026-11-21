@@ -5,8 +5,8 @@
 - name: spin
   kind: git
   source: https://github.com/spin-stack/spin
-  version: v20261120.01
-  pin: 530f1250a400d5b29dc629d6937152d317dbeadd
+  version: v20261121.01
+  pin: c0ffbc0936c718db3583e7aa2c88244b420a7dff
   track: github-release
   note: >-
     The release whose CLI each VSIX carries (task package:all), pulled from its public package

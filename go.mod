@@ -5,7 +5,7 @@ go 1.27.0
 toolchain go1.27.3
 
 require (
-	github.com/spin-stack/go-tools v0.20261127.3 // indirect
+	github.com/spin-stack/go-tools v0.20261127.15 // indirect
 	go.yaml.in/yaml/v3 v3.0.6 // indirect
 )
 

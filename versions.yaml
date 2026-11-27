@@ -1,6 +1,6 @@
 # What the extension pins from outside it, but its npm packages (pnpm-lock.yaml), go-tools' cmd/task
 # (go.mod) and the actions the workflows run (Dependabot's). It is go-tools' versions format:
-# `versions version <name>` reads an entry from a task, `versions check` says what is behind.
+# `versions version <name>` reads an entry from a task, `go tool task versions` says what is behind.
 
 - name: spin
   kind: git
@@ -8,6 +8,7 @@
   version: v20261125.01
   pin: 40ba7e572a0041719cba3d5c5eae8ae1563a3817
   track: github-release
+  bump: go tool task spin:bump
   note: >-
     The release whose CLI each VSIX carries (task package:all), pulled from its public package
     ghcr.io/spin-stack/spin-release and held by cosign to what spin's release workflow signed and
@@ -26,3 +27,10 @@
     checksum database holds it to its bytes and no runner needs it installed. spin-machine pins
     it too: keep the two at one version. A bump is checked with task package:all, and with a
     binary altered by a byte, which it must refuse.
+
+- name: actionlint
+  kind: module
+  source: github.com/rhysd/actionlint/cmd/actionlint
+  version: v1.7.12
+  track: github-release https://github.com/rhysd/actionlint
+  note: go tool task lint:workflows, which task gate runs. spin's version.

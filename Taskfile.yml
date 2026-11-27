@@ -4,6 +4,14 @@ version: '3'
 # packaged by vsce. Every install goes through Socket Firewall (sfw), and every workflow
 # step is one of these tasks (taskgate), so a developer runs what CI runs.
 
+includes:
+  common:
+    taskfile: '{{.GO_TOOLS_TASKS}}'
+    flatten: true
+    vars:
+      RELEASE:
+        map: {elsewhere: tag.yml publish.yml}
+
 vars:
   # The release a publish is for: the tag a workflow runs on, or TAG=v1.2.3 on the command line.
   TAG: '{{.GITHUB_REF_NAME}}'
@@ -219,7 +227,8 @@ tasks:
       # In the workflow, the only credentials git has are the app's read token; a developer's own
       # git already reaches spin.
       - '[ -z "${GH_TOKEN:-}" ] || gh auth setup-git'
-      - versions bump spin "{{.RELEASE}}"
+      # -by: spin's entry names this task in bump:, so the common bump refuses it and this runs.
+      - versions bump -by 'go tool task spin:bump' spin "{{.RELEASE}}"
 
   contract:spin:
     desc: Hold src/cli/contract.ts's error codes and actions to errorActions in spin's cmd/cli/cmd/errcode.go at the release versions.yaml pins (hack/errcodes), read from spin's repository over git - with GH_TOKEN as git's credentials when it is set, since spin is private. The Bump spin workflow runs it after the bump, so a release that adds or drops a code is a red bump, not an envelope read as internal.
@@ -266,11 +275,12 @@ tasks:
           -f "client_payload[conclusion]=${CONCLUSION}"
 
   gate:
-    desc: What holds the repository's shape - every install through the firewall, every workflow step a task, and no commit since origin/main by a test's identity.
+    desc: What holds the repository's shape - every install through the firewall, every workflow step a task, go-tools' common tasks as every repository has them, the workflows through actionlint, and no commit since origin/main by a test's identity.
     cmds:
       - sfw check
       # The Task running this one, which taskgate asks for the task names.
-      - taskgate -task {{.TASK_EXE}}
+      - taskgate -common -task {{.TASK_EXE}}
+      - task: lint:workflows
       # A test that writes git's author into the checkout makes every commit after it the
       # test's; this refuses those commits before they reach main.
       - testidentity -base origin/main
